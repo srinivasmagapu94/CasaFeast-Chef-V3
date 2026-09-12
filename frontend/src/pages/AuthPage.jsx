@@ -15,56 +15,71 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
-const SHOWCASE_VIDEO = "/chef_showcase.mp4";
-const VIDEO_POSTER =
-  "https://images.unsplash.com/photo-1758524151953-d87150127c63?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
+const STORY = [
+  { img: "/story/cook.jpeg", step: "01", tag: "COOK", title: "Cook what you love, from home", desc: "Prepare fresh homemade meals in your own kitchen — no restaurant, no overheads.", metric: ["Home kitchens", "100%"], color: "#15803D" },
+  { img: "/story/menu.jpeg", step: "02", tag: "LIST", title: "Upload your menu in minutes", desc: "Photograph your dishes, set subscription plans and go live on the Casafeast marketplace.", metric: ["Setup time", "< 10 min"], color: "#1D4ED8" },
+  { img: "/story/order.jpeg", step: "03", tag: "ORDERS", title: "Receive & ship daily orders", desc: "Accept subscription orders and hand off to a delivery partner in one tap.", metric: ["Avg. orders/day", "40+"], color: "#D97706" },
+  { img: "/story/earn.jpeg", step: "04", tag: "EARN", title: "Grow real monthly income", desc: "Track earnings, payouts and subscriptions — turn your cooking into a thriving business.", metric: ["Avg. monthly", "₹1.2L+"], color: "#15803D" },
+];
 
 function VideoShowcase() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((i) => (i + 1) % STORY.length), 3600);
+    return () => clearInterval(id);
+  }, []);
+  const s = STORY[idx];
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-float bg-slate-900">
-      <video
-        data-testid="showcase-video"
-        className="absolute inset-0 w-full h-full object-cover"
-        src={SHOWCASE_VIDEO}
-        poster={VIDEO_POSTER}
-        autoPlay
-        muted
-        loop
-        playsInline
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/40 to-slate-900/20" />
+    <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-float bg-slate-900" data-testid="story-showcase">
+      {STORY.map((sc, i) => (
+        <div
+          key={i}
+          className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+          style={{ backgroundImage: `url(${sc.img})`, opacity: i === idx ? 1 : 0 }}
+        >
+          {i === idx && <div className="absolute inset-0 bg-cover bg-center animate-kenburns" style={{ backgroundImage: `url(${sc.img})` }} />}
+        </div>
+      ))}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/45 to-slate-900/20" />
+
       <div className="absolute top-6 left-6 flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-md px-3 py-1.5 border border-white/20">
         <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-        <span className="text-xs font-semibold text-white tracking-wide">AI SHOWCASE · LIVE</span>
+        <span className="text-xs font-semibold text-white tracking-wide">HOW CASAFEAST WORKS</span>
+      </div>
+
+      {/* Journey rail */}
+      <div className="absolute top-6 right-6 flex flex-col gap-2 items-end">
+        {STORY.map((sc, i) => (
+          <button
+            key={i}
+            onClick={() => setIdx(i)}
+            data-testid={`story-dot-${i}`}
+            className={`flex items-center gap-2 transition-all ${i === idx ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
+          >
+            <span className={`text-[11px] font-semibold ${i === idx ? "text-white" : "text-white/60"}`}>{sc.tag}</span>
+            <span className="h-1.5 rounded-full transition-all" style={{ width: i === idx ? 28 : 10, backgroundColor: i === idx ? sc.color : "rgba(255,255,255,0.4)" }} />
+          </button>
+        ))}
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 p-8">
-        <p className="text-emerald-300 text-sm font-semibold tracking-wide mb-2 flex items-center gap-2">
-          <Sparkles className="h-4 w-4" /> Home chefs. High-volume revenue.
-        </p>
-        <h2 className="text-white font-display font-extrabold text-3xl lg:text-4xl leading-tight max-w-md">
-          Turn your kitchen into a thriving subscription business.
-        </h2>
-
-        <div className="mt-6 grid grid-cols-3 gap-3 max-w-lg">
-          {[
-            { icon: TrendingUp, label: "Avg. Monthly", value: "₹1.2L+" },
-            { icon: ShieldCheck, label: "Verified Chefs", value: "2,400+" },
-            { icon: Clock3, label: "Setup Time", value: "< 10 min" },
-          ].map((m, i) => (
-            <motion.div
-              key={m.label}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + i * 0.12 }}
-              className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-3.5"
-            >
-              <m.icon className="h-5 w-5 text-emerald-300 mb-2" />
-              <div className="text-white font-display font-bold text-xl">{m.value}</div>
-              <div className="text-white/60 text-[11px] font-medium">{m.label}</div>
-            </motion.div>
-          ))}
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={idx} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.5 }}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="font-display font-black text-5xl leading-none" style={{ color: s.color }}>{s.step}</span>
+              <span className="text-emerald-300 text-sm font-semibold tracking-widest uppercase">{s.tag}</span>
+            </div>
+            <h2 className="text-white font-display font-extrabold text-3xl lg:text-4xl leading-tight max-w-md">{s.title}</h2>
+            <p className="text-white/70 mt-3 max-w-md text-sm">{s.desc}</p>
+            <div className="mt-5 inline-flex items-center gap-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-4 py-2.5">
+              <TrendingUp className="h-5 w-5 text-emerald-300" />
+              <div>
+                <div className="text-white font-display font-bold text-lg leading-none">{s.metric[1]}</div>
+                <div className="text-white/60 text-[11px]">{s.metric[0]}</div>
+              </div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -393,7 +408,7 @@ export default function AuthPage() {
           </motion.div>
         </div>
       </div>
-      <LegalFooter className="border-t border-slate-100 bg-white" />
+      <LegalFooter variant="fancy" className="border-t border-slate-100 bg-[#F8FAFC]/80 backdrop-blur" />
 
       <OTPDialog
         open={otpOpen}

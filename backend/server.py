@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
+import hashlib
 import logging
 import random
 from pathlib import Path
@@ -39,6 +40,22 @@ def clean(doc: dict) -> dict:
     if doc and "_id" in doc:
         doc.pop("_id", None)
     return doc
+
+
+PLAN_DAYS = {"Weekly 5-Days": 5, "Monthly 20-Days": 20, "Quarterly 60-Days": 60}
+
+
+async def push_notification(chefUUID: str, title: str, tone: str = "green", meta: dict = None):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "chefUUID": chefUUID,
+        "title": title,
+        "tone": tone,
+        "read": False,
+        "createdAt": now_iso(),
+        "meta": meta or {},
+    }
+    await db.notifications.insert_one(doc)
 
 
 # ------------------------- Models -------------------------
@@ -152,6 +169,7 @@ class MenuRequest(BaseModel):
     isAddonAvailable: bool = False
     addons: List[AddonDTO] = []
     menuImageUrl: str = ""
+    menuImages: List[str] = []
 
 
 class RejectOrderRequest(BaseModel):
@@ -457,6 +475,11 @@ async def request_delivery(orderId: str, preferred: Optional[str] = None):
         {"orderId": orderId},
         {"$set": {"deliveryMode": "dispatched", "deliveryPartner": dispatch["provider"], "dispatch": dispatch, "status": "accepted"}},
     )
+    await push_notification(
+        order["chefUUID"],
+        f"Delivery partner {dispatch['provider']} assigned to order {orderId}",
+        "blue", {"orderId": orderId, "trackingId": dispatch["trackingId"]},
+    )
     return dispatch
 
 
@@ -466,8 +489,46 @@ async def delivery_status(orderId: str):
     if not order or not order.get("dispatch"):
         raise HTTPException(status_code=404, detail="No dispatch found")
     dispatch = delivery_svc.advance_status(order["dispatch"])
+    notify_map = {
+        "picked_up": ("Rider picked up order {oid} from your kitchen", "blue"),
+        "out_for_delivery": ("Order {oid} is out for delivery to {cust}", "blue"),
+        "delivered": ("Order {oid} delivered to {cust} — customer notified", "green"),
+    }
+    notified = set(dispatch.get("notified", []))
+    st = dispatch.get("status")
+    if st in notify_map and st not in notified:
+        title, tone = notify_map[st]
+        await push_notification(
+            order["chefUUID"],
+            title.format(oid=orderId, cust=order.get("customerName", "customer")),
+            tone, {"orderId": orderId, "customerPinged": True},
+        )
+        notified.add(st)
+        dispatch["notified"] = list(notified)
     await db.orders.update_one({"orderId": orderId}, {"$set": {"dispatch": dispatch}})
     return dispatch
+
+
+@api_router.post("/orders/{orderId}/acknowledge-postpone")
+async def acknowledge_postpone(orderId: str):
+    order = await db.orders.find_one({"orderId": orderId})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    await db.orders.update_one({"orderId": orderId}, {"$set": {"postpone.acknowledged": True}})
+    o = await db.orders.find_one({"orderId": orderId})
+    return clean(o)
+
+
+@api_router.get("/notifications/{chefUUID}")
+async def get_notifications(chefUUID: str):
+    notes = await db.notifications.find({"chefUUID": chefUUID}).sort("createdAt", -1).to_list(50)
+    return [clean(n) for n in notes]
+
+
+@api_router.post("/notifications/{chefUUID}/read")
+async def mark_notifications_read(chefUUID: str):
+    await db.notifications.update_many({"chefUUID": chefUUID}, {"$set": {"read": True}})
+    return {"ok": True}
 
 
 # ------------------------- Revenue -------------------------
@@ -505,13 +566,67 @@ async def revenue(chefUUID: str):
     return await _compute_revenue(chefUUID)
 
 
+def _current_month_label():
+    return datetime.now(timezone.utc).strftime("%B %Y")
+
+
+def _month_factor(label: str) -> float:
+    if label == _current_month_label():
+        return 1.0
+    h = int(hashlib.md5(label.encode()).hexdigest(), 16)
+    return round(0.70 + (h % 46) / 100.0, 2)  # 0.70 - 1.15
+
+
+def _scale_revenue(data: dict, f: float) -> dict:
+    gross = round(data["grossRevenue"] * f, 2)
+    commission = round(gross * 0.20, 2)
+    gst = round(commission * 0.18, 2)
+    net = round(gross - commission - gst, 2)
+    return {
+        "grossRevenue": gross,
+        "commission": commission,
+        "gst": gst,
+        "netPayout": net,
+        "completedOrders": max(0, round(data["completedOrders"] * f)),
+        "totalOrders": max(0, round(data["totalOrders"] * f)),
+        "activeSubscriptions": data["activeSubscriptions"],
+        "weeklyTrend": data["weeklyTrend"],
+    }
+
+
+@api_router.get("/payout/{chefUUID}/history")
+async def payout_history(chefUUID: str):
+    chef = await db.chefs.find_one({"chefUUID": chefUUID})
+    if not chef:
+        raise HTTPException(status_code=404, detail="Chef not found")
+    base = await _compute_revenue(chefUUID)
+    now = datetime.now(timezone.utc)
+    y, mo = now.year, now.month
+    out = []
+    for _ in range(6):
+        label = datetime(y, mo, 1).strftime("%B %Y")
+        fig = _scale_revenue(base, _month_factor(label))
+        out.append({
+            "month": label, "key": f"{y:04d}-{mo:02d}",
+            "grossRevenue": fig["grossRevenue"], "commission": fig["commission"],
+            "gst": fig["gst"], "netPayout": fig["netPayout"], "completedOrders": fig["completedOrders"],
+            "isCurrent": label == _current_month_label(),
+        })
+        mo -= 1
+        if mo == 0:
+            mo = 12
+            y -= 1
+    return out
+
+
 @api_router.get("/payout/{chefUUID}/statement")
 async def payout_statement(chefUUID: str, format: str = "pdf", month: Optional[str] = None):
     chef = await db.chefs.find_one({"chefUUID": chefUUID})
     if not chef:
         raise HTTPException(status_code=404, detail="Chef not found")
-    data = await _compute_revenue(chefUUID)
-    month_label = month or datetime.now(timezone.utc).strftime("%B %Y")
+    base = await _compute_revenue(chefUUID)
+    month_label = month or _current_month_label()
+    data = _scale_revenue(base, _month_factor(month_label))
     safe = month_label.replace(" ", "_")
     if format == "csv":
         content = payout_svc.generate_csv(chef, data, month_label)
@@ -572,6 +687,17 @@ async def seed(force: bool = False):
     if existing and not force:
         return {"seeded": False, "chefUUID": existing["chefUUID"], "message": "Already seeded"}
     if force:
+        # Remove old demo/newchef records AND any orphaned test data (orders/menus/notifications
+        # under their prior chefUUIDs). Seeded orderIds are CF1001-CF1007 which collide across
+        # chefs if left behind, causing POST /orders/{id}/... to hit stale records.
+        prior = await db.chefs.find({"email": {"$in": ["demo@casafeast.com", "newchef@casafeast.com"]}}).to_list(100)
+        prior_uuids = [c.get("chefUUID") for c in prior if c.get("chefUUID")]
+        if prior_uuids:
+            await db.orders.delete_many({"chefUUID": {"$in": prior_uuids}})
+            await db.menus.delete_many({"chefUUID": {"$in": prior_uuids}})
+            await db.notifications.delete_many({"chefUUID": {"$in": prior_uuids}})
+        # Also purge any lingering seeded orderIds regardless of chef
+        await db.orders.delete_many({"orderId": {"$in": [f"CF100{i}" for i in range(1, 8)]}})
         await db.chefs.delete_many({"email": {"$in": ["demo@casafeast.com", "newchef@casafeast.com"]}})
     chef_uuid = str(uuid.uuid4())
     chef = {
@@ -635,30 +761,56 @@ async def seed(force: bool = False):
         },
     ]
     for i, sm in enumerate(sample_menus):
+        gallery = [imgs[i % len(imgs)], imgs[(i + 1) % len(imgs)], imgs[(i + 2) % len(imgs)]]
         sm.update({
             "menuId": str(uuid.uuid4()), "chefUUID": chef_uuid, "priorHoursNotice": "24",
-            "menuImageUrl": imgs[i % len(imgs)], "expirationTimestamp": None, "createdAt": now_iso(),
+            "menuImageUrl": gallery[0], "menuImages": gallery, "expirationTimestamp": None, "createdAt": now_iso(),
         })
         await db.menus.insert_one(sm)
 
+    await db.notifications.delete_many({"chefUUID": chef_uuid})
     await db.orders.delete_many({"chefUUID": chef_uuid})
-    buckets = ["Today", "Today", "Upcoming", "Upcoming", "Completed", "Completed", "Completed"]
-    slots = ["Breakfast", "Lunch", "Dinner"]
-    subs = ["Weekly 5-Days", "Monthly 20-Days", "Quarterly 60-Days"]
-    customers = ["Priya Sharma", "Karthik Reddy", "Meera Nair", "Aditya Kumar", "Sneha Iyer", "Vikram Singh", "Divya Menon"]
-    items = ["South Indian Thali", "Protein Box", "Jain Special", "Mini Meals Combo"]
-    for i, b in enumerate(buckets):
-        order = {
-            "orderId": f"CF{1001 + i}", "chefUUID": chef_uuid, "bucket": b,
-            "customerName": customers[i % len(customers)], "timeSlot": slots[i % len(slots)],
-            "subscription": subs[i % len(subs)], "items": items[i % len(items)],
-            "orderValue": [450, 620, 380, 700, 520, 480, 650][i], "dayIndex": i % 7,
-            "status": "accepted" if b == "Completed" else "pending",
-            "deliveryMode": "dispatched" if b == "Completed" else "pending",
-            "deliveryPartner": "Porter" if b == "Completed" else "",
+    today = datetime.now(timezone.utc)
+
+    def dd(offset):
+        return (today + timedelta(days=offset)).strftime("%d %b %Y")
+
+    seed_orders = [
+        {"orderId": "CF1001", "bucket": "Today", "customerName": "Priya Sharma", "timeSlot": "Breakfast",
+         "subscription": "Weekly 5-Days", "items": "South Indian Thali", "orderValue": 450, "dayIndex": 0,
+         "deliveredDays": 2, "status": "pending", "deliveryMode": "pending"},
+        {"orderId": "CF1002", "bucket": "Today", "customerName": "Karthik Reddy", "timeSlot": "Lunch",
+         "subscription": "Monthly 20-Days", "items": "Protein Box", "orderValue": 620, "dayIndex": 1,
+         "deliveredDays": 8, "status": "pending", "deliveryMode": "pending"},
+        {"orderId": "CF1003", "bucket": "Upcoming", "customerName": "Meera Nair", "timeSlot": "Dinner",
+         "subscription": "Weekly 5-Days", "items": "Jain Special", "orderValue": 380, "dayIndex": 2,
+         "deliveredDays": 2, "status": "pending", "deliveryMode": "pending",
+         "postpone": {"isPostponed": True, "postponedDate": dd(0), "nextDeliveryDate": dd(1),
+                      "reason": "Customer travelling", "acknowledged": False}},
+        {"orderId": "CF1004", "bucket": "Upcoming", "customerName": "Aditya Kumar", "timeSlot": "Breakfast",
+         "subscription": "Quarterly 60-Days", "items": "Mini Meals Combo", "orderValue": 700, "dayIndex": 3,
+         "deliveredDays": 24, "status": "pending", "deliveryMode": "pending"},
+        {"orderId": "CF1005", "bucket": "Completed", "customerName": "Sneha Iyer", "timeSlot": "Lunch",
+         "subscription": "Weekly 5-Days", "items": "South Indian Thali", "orderValue": 520, "dayIndex": 4,
+         "deliveredDays": 5, "status": "accepted", "deliveryMode": "dispatched", "deliveryPartner": "Porter"},
+        {"orderId": "CF1006", "bucket": "Completed", "customerName": "Vikram Singh", "timeSlot": "Dinner",
+         "subscription": "Monthly 20-Days", "items": "Protein Box", "orderValue": 480, "dayIndex": 5,
+         "deliveredDays": 20, "status": "accepted", "deliveryMode": "dispatched", "deliveryPartner": "Rapido Business"},
+        {"orderId": "CF1007", "bucket": "Completed", "customerName": "Divya Menon", "timeSlot": "Breakfast",
+         "subscription": "Quarterly 60-Days", "items": "Jain Special", "orderValue": 650, "dayIndex": 6,
+         "deliveredDays": 60, "status": "accepted", "deliveryMode": "dispatched", "deliveryPartner": "Porter"},
+    ]
+    for o in seed_orders:
+        plan = PLAN_DAYS.get(o["subscription"], 5)
+        o.update({
+            "chefUUID": chef_uuid,
+            "planTotalDays": plan,
+            "remainingDays": max(0, plan - o["deliveredDays"]),
+            "deliveryPartner": o.get("deliveryPartner", ""),
             "createdAt": now_iso(),
-        }
-        await db.orders.insert_one(order)
+        })
+        o.setdefault("postpone", {"isPostponed": False, "acknowledged": False})
+        await db.orders.insert_one(o)
 
     return {"seeded": True, "chefUUID": chef_uuid, "newChefUUID": new_uuid}
 

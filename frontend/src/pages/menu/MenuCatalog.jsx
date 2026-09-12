@@ -213,7 +213,7 @@ function EditForm({ menu, onSave }) {
     priorHoursNotice: menu.priorHoursNotice || "24", isActive: menu.isActive, itemTypes: menu.itemTypes || [],
     isAvailableForBreakfast: menu.isAvailableForBreakfast, isAvailableForLunch: menu.isAvailableForLunch, isAvailableForDinner: menu.isAvailableForDinner,
     durations: menu.durations?.length ? menu.durations : [{ mealDuration: "", price: "", dailyVolumeLimit: "" }],
-    isAddonAvailable: menu.isAddonAvailable, addons: menu.addons || [], menuImageUrl: menu.menuImageUrl,
+    isAddonAvailable: menu.isAddonAvailable, addons: menu.addons || [], menuImageUrl: menu.menuImageUrl, menuImages: menu.menuImages || [],
   });
   return (
     <div>

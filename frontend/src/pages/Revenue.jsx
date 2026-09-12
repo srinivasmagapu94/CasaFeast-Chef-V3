@@ -13,15 +13,18 @@ export default function Revenue() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState("");
+  const [history, setHistory] = useState([]);
 
-  const download = async (format) => {
-    setDownloading(format);
+  const download = async (format, month) => {
+    const tag = `${format}-${month || "current"}`;
+    setDownloading(tag);
     try {
-      const res = await apiClient.get(`/payout/${chefUUID}/statement?format=${format}`, { responseType: "blob" });
+      const qs = `format=${format}${month ? `&month=${encodeURIComponent(month)}` : ""}`;
+      const res = await apiClient.get(`/payout/${chefUUID}/statement?${qs}`, { responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Casafeast_Statement.${format}`;
+      a.download = `Casafeast_Statement_${(month || "current").replace(/\s/g, "_")}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -36,6 +39,7 @@ export default function Revenue() {
 
   useEffect(() => {
     apiClient.get(`/revenue/${chefUUID}`).then((r) => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
+    apiClient.get(`/payout/${chefUUID}/history`).then((r) => setHistory(r.data)).catch(() => {});
   }, [chefUUID]);
 
   if (loading || !data) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-[#1D4ED8]" /></div>;
@@ -58,10 +62,10 @@ export default function Revenue() {
         </div>
         <div className="flex items-center gap-2">
           <Button data-testid="download-pdf" onClick={() => download("pdf")} disabled={!!downloading} className="bg-[#1D4ED8] hover:bg-[#1E40AF]">
-            {downloading === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} Statement PDF
+            {downloading === "pdf-current" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} Statement PDF
           </Button>
           <Button data-testid="download-csv" onClick={() => download("csv")} disabled={!!downloading} variant="outline">
-            {downloading === "csv" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />} CSV
+            {downloading === "csv-current" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />} CSV
           </Button>
         </div>
       </div>
@@ -125,6 +129,40 @@ export default function Revenue() {
             <div key={l} className="rounded-xl bg-slate-50 p-4">
               <div className="text-sm font-bold" style={{ color: c }}>{v}</div>
               <div className="text-[11px] text-slate-500 mt-0.5">{l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Payout history */}
+      <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-soft p-6" data-testid="payout-history">
+        <div className="flex items-center gap-2 mb-4">
+          <Receipt className="h-4 w-4 text-[#15803D]" />
+          <h3 className="font-semibold text-slate-800">Statement History</h3>
+          <span className="text-[11px] text-slate-400">Re-download any month, anytime</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {history.map((m) => (
+            <div key={m.key} data-testid={`history-row-${m.key}`} className="flex items-center gap-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                  {m.month}
+                  {m.isCurrent && <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">CURRENT</span>}
+                </div>
+                <div className="text-[11px] text-slate-400">Net payout ₹{m.netPayout} · {m.completedOrders} orders · commission ₹{m.commission} + GST ₹{m.gst}</div>
+              </div>
+              <div className="text-right hidden sm:block">
+                <div className="font-display font-bold text-slate-900">₹{m.grossRevenue}</div>
+                <div className="text-[10px] text-slate-400">gross</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button size="sm" variant="outline" data-testid={`history-pdf-${m.key}`} onClick={() => download("pdf", m.month)} disabled={!!downloading} className="h-8 text-xs">
+                  {downloading === `pdf-${m.month}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} PDF
+                </Button>
+                <Button size="sm" variant="ghost" data-testid={`history-csv-${m.key}`} onClick={() => download("csv", m.month)} disabled={!!downloading} className="h-8 text-xs text-slate-500">
+                  {downloading === `csv-${m.month}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />} CSV
+                </Button>
+              </div>
             </div>
           ))}
         </div>

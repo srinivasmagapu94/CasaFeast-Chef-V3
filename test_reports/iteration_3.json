@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 3 backend + frontend testing on the public REACT_APP_BACKEND_URL. Backend: 38/38 pytest cases pass (29 iteration-1/2 regressions in backend_test.py + 9 new tests in test_iteration3.py). New backend coverage: (a) seeded menus expose menuImages[] gallery + menuImageUrl cover, (b) seeded orders expose planTotalDays/deliveredDays/remainingDays and CF1003 postpone block (isPostponed, postponedDate, nextDeliveryDate, acknowledged=false), (c) POST /api/orders/CF1003/acknowledge-postpone flips postpone.acknowledged=true and 404s on unknown order, (d) POST /api/orders/{id}/request-delivery creates a notification (verified via GET /api/notifications/{chefUUID}) and POST /api/notifications/{chefUUID}/read marks them read, (e) GET /api/payout/{chefUUID}/history returns exactly 6 months with month/key/grossRevenue/commission/gst/netPayout/completedOrders/isCurrent, current month first, (f) GET /api/payout/{chefUUID}/statement?format=pdf|csv&month=<Month Year> generates valid PDF (%PDF) and CSV (contains Casafeast + month label) filenames tagged with month. Frontend Playwright: (1) Auth story-showcase renders with 4 story-dot-* dots and legal-footer contains 'SystemNex' + 'TM 7810892'. (2) Order details dialog opens on card body click for CF1003 showing details-remaining='3 days left', details-progress bar, details-postponed-date='12 Sep 2026', details-next-date='13 Sep 2026', and details-ack-button which flips to details-ack-done after click. (3) Dispatch button click does NOT open order-details-dialog (stopPropagation works). (4) After clicking order-dispatch-CF1001, notification-bell shows notification-badge=1; opening notification-panel lists 'Delivery partner Porter assigned to order CF1001 just now'; badge clears after panel open. (5) Revenue page payout-history section lists 6 history-row-* rows with history-pdf-*/history-csv-* — verified downloading a non-current month yields a valid PDF (starts %PDF, filename Casafeast_Statement_<Month>_<Year>.pdf) and CSV containing 'Casafeast'. (6) Menu Create: menu-gallery-input accepts multiple files → 3 items rendered as menu-gallery-item with menu-gallery-cover + menu-gallery-remove; cover swap and remove work. (7) Menu Edit dialog pre-populates the gallery with 3 existing images.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/seed?force=true", "issue": "Original seed deleted chef documents by email but left orphaned orders/menus/notifications under prior chefUUIDs. Because seeded orderIds (CF1001-CF1007) are reused across chefs, endpoints operating by orderId (accept/reject/request-delivery/delivery/acknowledge-postpone) resolved the OLDEST match and pushed side effects (dispatch, notifications) to a stale chef. Fixed in test iteration by extending force cleanup to also purge orders/menus/notifications for previous demo/newchef UUIDs and any lingering CF1001..CF1007 orderIds."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Auth story-showcase", "issues": ["Story auto-advances correctly; only cosmetic — the fancy legal-footer sits below the auth card and can be visually cropped on shorter viewports. Consider slightly smaller top spacing on the footer or making the card scroll within its column at <900px height."]},
+      {"screen": "Radix DialogTitle (still open from iteration-2)", "issues": ["Order-details-dialog, tracking-dialog, reject-dialog, otp-dialog trigger Radix a11y warning 'DialogContent requires a DialogTitle'. Add VisuallyHidden DialogTitle."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/backend/tests/test_iteration3.py", "/app/test_reports/pytest/all.xml"],
+  "action_items": [
+    "(Fixed by testing agent) Seed cleanup extended to purge orphaned orders/menus/notifications; please review the change in server.py /api/seed endpoint.",
+    "(Optional a11y) Add VisuallyHidden DialogTitle to order-details-dialog / tracking-dialog / reject-dialog / otp-dialog to silence Radix warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py: /api/orders/{id}/* endpoints resolve orders by orderId only (not chefUUID). In production, if the same orderId ever collides across chefs (as easily happens here between reseeds), operations will mutate the wrong record and push notifications to the wrong chef. Consider scoping by (chefUUID, orderId) or making orderId globally unique.",
+    "server.py is >800 lines now — split into routers (auth, files, menu, orders, notifications, revenue/payout, admin, seed) for maintainability.",
+    "delivery.advance_status advances one stage every ~6 minutes; means UI notifications for picked_up/out_for_delivery/delivered are only observable over real time. Consider exposing an admin/test flag to fast-forward for QA.",
+    "Frontend: request-delivery pushes only chef-side notifications; the 'customer pinged' meta is stored but no real customer notification. Doc'd as mocked — OK for demo.",
+    "Frontend Orders.jsx: verify stopPropagation on ALL action buttons (Accept/Reject/Dispatch/Track). Dispatch confirmed via test; consider adding data-testid smoke assertions for accept/reject stopPropagation as well."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (seed force cleanup extended to purge orphaned test data)",
+    "/app/backend/tests/test_iteration3.py (new)"
+  ],
+  "success_rate": {"backend": "100% (38/38)", "frontend": "100% of iteration-3 testids and flows validated (story-showcase, story-dot-*, legal-footer, order-details-dialog + details-*, notification-bell/badge/panel, payout-history + history-pdf/csv download, menu-gallery-* create+edit)."},
+  "test_credentials": "demo@casafeast.com (activated) / newchef@casafeast.com (onboarding). Any 6-digit OTP. Re-seed via POST /api/seed?force=true (now cleans orphans).",
+  "seed_data_creation": "POST /api/seed?force=true creates 2 chefs, 3 menus (each with menuImages[3]+cover), 7 orders (CF1001..CF1007) with planTotalDays/deliveredDays/remainingDays; CF1003 carries the postpone block.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: REACT_APP_BACKEND_URL. Frontend routes are /app/orders, /app/revenue, /app/menu/create, /app/menu/active, /app/menu/inactive. Auth testids: tab-login, login-identifier, login-submit-button, otp-input, verify-otp-button, geo-simulate-visakhapatnam. Order tabs are lowercase: orders-tab-today/upcoming/completed. Order card clicks open order-details-dialog; action buttons stop propagation. Notification bell auto-polls; badge appears immediately after request-delivery. Payout history rows use history-row-<YYYY-MM>. Menu gallery input is multiple and hidden — use set_input_files directly. Pytest ini pins -n 2 --dist loadscope; if session-scope seed fixtures fight each other, run with '-n 0' (NOT -p no:xdist).",
+  "rca of the issue": "Seed race/dup-orderId: seed?force=true only removed chef documents for demo/newchef emails; orders/menus/notifications inserted under the prior chefUUIDs stayed in the DB. Since seed re-inserts CF1001..CF1007 with a new chefUUID, duplicates accumulated. All find_one({'orderId': ...}) queries then returned the OLDEST match. Impact: request-delivery/acknowledge-postpone/etc. mutated a stale chef's order and push_notification wrote to a chef with no live session. Mitigation applied in server.py seed endpoint: on force, also delete_many orders/menus/notifications for all previously-existing chefUUIDs for these emails, plus a defensive delete_many on the seeded orderId set."
+}

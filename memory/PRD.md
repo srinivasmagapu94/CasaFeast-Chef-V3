@@ -23,8 +23,16 @@ Enterprise Chef Portal frontend + backend for home chefs: split-screen auth (vid
 
 ## Implemented (2026-06)
 - All 5 modules built and tested end-to-end (iteration 1: 21/21 backend, frontend 100%).
-- Iteration 2 (29/29 backend, frontend 100%): real Emergent object-storage uploads (menu photos on Create/Edit + onboarding KYC/FSSAI/passbook docs, persisted + served via /api/files); auto-playing muted looping showcase video on auth; production-ready delivery dispatch layer (delivery.py) with tracking ID/status/partner details + tracking dialog (simulated mode until Porter/Rapido keys added, /orders/{id}/delivery status polling); downloadable monthly payout statements as PDF (reportlab) + CSV (payout.py) from Revenue.
-- Demo seed: 2 chefs (demo@casafeast.com activated, newchef@casafeast.com onboarding), 3 menus, 7 orders. Admin console at /admin.
+- Iteration 2 (29/29 backend, frontend 100%): real object-storage uploads, auto-play showcase, delivery dispatch layer + tracking, payout PDF+CSV.
+- Iteration 3 (38/38 backend, frontend 100%):
+  - Menu photo GALLERY — multi-upload per menu with a selectable COVER (Create + Edit); cover shown on cards.
+  - Payout HISTORY — /payout/{uuid}/history returns 6 months; each re-downloadable as PDF/CSV (month-scaled figures).
+  - Delivery NOTIFICATIONS — request-delivery + status advances push in-app notifications; TopBar bell shows live unread badge, marks read on open.
+  - Auth STORY showcase — auto-advancing 4 AI-generated scenes (Cook → List → Orders → Earn) conveying the chef journey (replaces the single ambient video).
+  - Order DETAILS dialog — click a card to see subscription progress (delivered/remaining, e.g. 5-day plan 2 delivered/3 left); postponed meals show postponed + new upcoming date with a chef Acknowledge action.
+  - Stylish gradient legal footer with TM badge on auth screens.
+  - Seed hardened to purge orphaned orders/menus/notifications on force reseed.
+- Demo seed: 2 chefs, 3 menus (gallery+cover), 7 orders (CF1001-07) incl. CF1003 postpone example. Admin console at /admin.
 
 ## Simulated / Not Real
 - OTP delivery, Google captcha, file storage, delivery partner dispatch (Porter/Rapido), support webhook.

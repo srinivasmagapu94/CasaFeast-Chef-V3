@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, ChevronDown, LogOut, Trash2, Mail, Phone, BadgeCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { invalidateCache } from "@/lib/api";
+import apiClient, { invalidateCache } from "@/lib/api";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import {
@@ -11,15 +11,42 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 
 export function TopBar() {
-  const { chef, logout } = useAuth();
+  const { chef, chefUUID, logout } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const initials = `${chef?.firstName?.[0] || ""}${chef?.lastName?.[0] || ""}`;
 
-  const notifications = [
-    { t: "New order from Priya Sharma", d: "2 min ago", tone: "green" },
-    { t: "Bank verification approved", d: "1 hr ago", tone: "blue" },
-    { t: "Complete onboarding to go live", d: "Today", tone: "amber" },
-  ];
+  const loadNotifs = async () => {
+    if (!chefUUID) return;
+    try {
+      const res = await apiClient.get(`/notifications/${chefUUID}`);
+      setNotifications(res.data);
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadNotifs();
+    const id = setInterval(loadNotifs, 10000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chefUUID]);
+
+  const unread = notifications.filter((n) => !n.read).length;
+
+  const handleOpen = async (open) => {
+    setNotifOpen(open);
+    if (open && unread > 0) {
+      try { await apiClient.post(`/notifications/${chefUUID}/read`); setTimeout(loadNotifs, 400); } catch {}
+    }
+  };
+
+  const timeAgo = (iso) => {
+    const diff = (Date.now() - new Date(iso).getTime()) / 60000;
+    if (diff < 1) return "just now";
+    if (diff < 60) return `${Math.floor(diff)} min ago`;
+    if (diff < 1440) return `${Math.floor(diff / 60)} hr ago`;
+    return `${Math.floor(diff / 1440)} d ago`;
+  };
 
   return (
     <header className="h-16 sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center px-4 lg:px-6" data-testid="topbar">
@@ -41,22 +68,28 @@ export function TopBar() {
           </div>
         </div>
 
-        <Popover open={notifOpen} onOpenChange={setNotifOpen}>
+        <Popover open={notifOpen} onOpenChange={handleOpen}>
           <PopoverTrigger asChild>
             <button data-testid="notification-bell" className="relative h-10 w-10 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors">
               <Bell className="h-5 w-5 text-slate-600" />
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+              {unread > 0 && (
+                <span data-testid="notification-badge" className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 ring-2 ring-white text-[9px] font-bold text-white flex items-center justify-center">{unread}</span>
+              )}
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0" data-testid="notification-panel">
-            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm">Notifications</div>
-            <div className="divide-y divide-slate-50">
-              {notifications.map((n, i) => (
-                <div key={i} className="px-4 py-3 hover:bg-slate-50 flex gap-3">
+            <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm flex items-center justify-between">
+              Notifications {unread > 0 && <span className="text-[11px] font-normal text-slate-400">{unread} new</span>}
+            </div>
+            <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-slate-400">No notifications yet</div>
+              ) : notifications.map((n) => (
+                <div key={n.id} className={`px-4 py-3 hover:bg-slate-50 flex gap-3 ${!n.read ? "bg-blue-50/40" : ""}`}>
                   <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${n.tone === "green" ? "bg-emerald-500" : n.tone === "blue" ? "bg-blue-500" : "bg-amber-500"}`} />
                   <div>
-                    <p className="text-sm text-slate-700">{n.t}</p>
-                    <p className="text-[11px] text-slate-400">{n.d}</p>
+                    <p className="text-sm text-slate-700">{n.title}</p>
+                    <p className="text-[11px] text-slate-400">{timeAgo(n.createdAt)}</p>
                   </div>
                 </div>
               ))}
