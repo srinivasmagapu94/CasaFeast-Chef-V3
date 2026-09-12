@@ -1,0 +1,153 @@
+{
+  "project_name": "Casafeast - Enterprise Chef Portal",
+  "archetype": "Clean Corporate Hybrid & Eco-Tech",
+  "app_type": "hybrid_fullstack",
+  "theme": "light",
+  "brand_identity": {
+    "name": "Casafeast",
+    "tagline": "Home-cooked. Planet-friendly.",
+    "logo_mark": "Green house-with-leaf emblem on cream background (#FDFBF7 / #F5F0E6)",
+    "legal_footer": "Created by SystemNex Techsolutions LLP. All rights reserved. TM Number: 7810892"
+  },
+  "colors": {
+    "background_canvas": "#F8FAFC",
+    "card_background": "#FFFFFF",
+    "brand_cream": "#FDFBF7",
+    "brand_cream_border": "#F3EFE6",
+    "primary_dynamic_blue": {
+      "main": "#1D4ED8",
+      "hover": "#1E40AF",
+      "active": "#1E3A8A",
+      "light": "#EFF6FF",
+      "border": "#BFDBFE"
+    },
+    "primary_organic_green": {
+      "main": "#15803D",
+      "hover": "#166534",
+      "active": "#14532D",
+      "light": "#F0FDF4",
+      "border": "#BBF7D0"
+    },
+    "neutrals": {
+      "text_primary": "#0F172A",
+      "text_secondary": "#334155",
+      "text_muted": "#64748B",
+      "border_default": "#E2E8F0",
+      "border_subtle": "#F1F5F9",
+      "surface_muted": "#F8FAFC",
+      "overlay_dark": "rgba(15, 23, 42, 0.6)"
+    },
+    "status": {
+      "pending_amber": "#D97706",
+      "pending_bg": "#FEF3C7",
+      "verified_green": "#16A34A",
+      "verified_bg": "#DCFCE7",
+      "rejected_red": "#DC2626",
+      "rejected_bg": "#FEE2E2",
+      "info_blue": "#2563EB",
+      "info_bg": "#DBEAFE"
+    }
+  },
+  "typography": {
+    "font_family_headings": "Outfit, Satoshi, system-ui, sans-serif",
+    "font_family_body": "Plus Jakarta Sans, Inter, system-ui, sans-serif",
+    "font_family_mono": "JetBrains Mono, Source Code Pro, monospace",
+    "scale": {
+      "h1_hero": "text-4xl sm:text-5xl lg:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight",
+      "h2_section": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "h3_subsection": "text-xl sm:text-2xl font-semibold text-slate-900",
+      "h4_card_heading": "text-lg font-semibold text-slate-900",
+      "body_large": "text-base font-normal text-slate-700 leading-relaxed",
+      "body_regular": "text-sm font-normal text-slate-600 leading-normal",
+      "caption_mono": "text-xs font-mono text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "layout_and_architecture": {
+    "auth_page": {
+      "type": "Split-Screen (60% Left / 40% Right)",
+      "left_section": "60% width - High-impact AI Video Showcase with floating revenue metrics card, interactive playback controls, revenue highlights, and subtle animated ambient green/blue background glow",
+      "right_section": "40% width - Centered interactive elevated Shadow Box Card (#FFFFFF) holding Auth/Signup/OTP dialog/Geofence state with smooth tab toggle",
+      "footer": "Sticky/Fixed legal compliance footer with text 'Created by SystemNex Techsolutions LLP. All rights reserved. TM Number: 7810892'"
+    },
+    "workspace_shell": {
+      "topbar": {
+        "height": "h-16",
+        "background": "bg-white/95 backdrop-blur-md border-b border-slate-200 z-40 sticky top-0",
+        "content": "Logo (Casafeast house-leaf icon in cream container), Chef Quick Info (Name, Email, Phone, Verification Badge), Quick Stats (Active Kitchen Indicator), Notification Bell with dot, Profile Avatar dropdown"
+      },
+      "sidebar": {
+        "width": "w-64",
+        "background": "bg-slate-900 text-slate-200 border-r border-slate-800 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16",
+        "modes": {
+          "onboarding_mode": "Shows restricted navigation: Step Progress indicator, Lock Icons on deactivated modules, Guidelines & FAQ link",
+          "activated_mode": "Shows full dashboard nav: Overview, Onboarding Status, Menu Catalog, Orders Kanban, Revenue & Payouts, Kitchen Settings"
+        },
+        "footer_widget": "Sidebar Support Ticket Box (#1E293B bg, rounded-xl p-4, quick button 'Raise Support Ticket' with pulse indicator)"
+      }
+    }
+  },
+  "modules_breakdown": {
+    "module_1_auth_geofence": {
+      "sign_up_form": "Name, Mobile Number (+91 format), Email, Kitchen Operating City selection",
+      "otp_dialog": "6-digit segmented OTP input box with auto-focus, resend timer countdown (60s), and 'Verify OTP' button",
+      "returning_login": "Quick login with phone + OTP or credentials with 'Remember Me'",
+      "geofence_lock": "Visual map lock overlay showing chef's current geolocation vs Casafeast serviceable zones with radius status badge"
+    },
+    "module_2_workspace_shell": "Top bar with live kitchen toggle (Online/Offline), notifications popover, chef user details card, support widget",
+    "module_3_onboarding_wizard": {
+      "steps": [
+        "Step 1: Pre-Screening & Commercial Disclosure with prominent 20% Base + 18% GST Commission structure banner with clear payout calculation example card",
+        "Step 2: Personal Profile & KYC with drag-and-drop file uploaders for PAN Card & Aadhaar Front/Back with live preview badges",
+        "Step 3: FSSAI Compliance with 14-digit FSSAI License input, registration type, and certificate document upload",
+        "Step 4: Bank Account & Payout Details with IFSC verification lookup, account number confirmation, and cancelled cheque upload"
+      ],
+      "verification_progress_board": "Real-time verification status board for 3 pillars: KYC Check (Verified/Pending), Bank Account Penny Drop (Verified/Pending), Field Hygiene Inspection (Scheduled/Verified) with progress ring"
+    },
+    "module_4_menu_catalog": {
+      "create_menu_form": "Dish Title, Cuisine Type dropdown, Category (Breakfast/Lunch/Dinner), Duration/Package builder (Single meal, Weekly Plan, Monthly Subscription), Veg/Non-Veg toggle, Packaging type, Pricing & Commission preview calculator",
+      "catalog_view": "Active vs Inactive Tabbed Grids, Search bar, Category filters, Rich Menu Cards with dish image, price tag, prep time badge, daily capacity counter, and toggle status switch"
+    },
+    "module_5_orders_kanban_and_revenue": {
+      "orders_kanban": "Columns for 'New / Today', 'Preparing / Upcoming', 'Dispatched / Completed'. Features live countdown timer per order, item checklist, bump status button, driver allocation detail",
+      "revenue_analytics": "KPI summary cards (Total Revenue, Net Payouts, Commission Paid, Total Orders Completed), Interactive Area Chart for daily/weekly revenue trends, Payout History table with downloadable PDF receipts"
+    }
+  },
+  "image_urls": {
+    "video_showcase_thumbnail": "https://images.unsplash.com/photo-1758524151953-d87150127c63?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200",
+    "chef_cooking_action": "https://images.unsplash.com/photo-1760445529057-2d9c60969d55?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+    "dishes": [
+      {
+        "name": "Gourmet Royal Thali",
+        "url": "https://images.unsplash.com/photo-1542367592-8849eb950fd8?crop=entropy&cs=srgb&fm=jpg&q=85&w=600"
+      },
+      {
+        "name": "Artisanal Curry Bowl",
+        "url": "https://images.unsplash.com/photo-1585937421612-70a008356fbe?crop=entropy&cs=srgb&fm=jpg&q=85&w=600"
+      },
+      {
+        "name": "Special Feast Platter",
+        "url": "https://images.unsplash.com/photo-1589778655375-3e622a9fc91c?crop=entropy&cs=srgb&fm=jpg&q=85&w=600"
+      },
+      {
+        "name": "Healthy Organic Grain Bowl",
+        "url": "https://images.unsplash.com/photo-1588644525273-f37b60d78512?crop=entropy&cs=srgb&fm=jpg&q=85&w=600"
+      }
+    ]
+  },
+  "visual_enhancers": {
+    "shadows": "Soft layered elevation (shadow-sm for cards, shadow-lg for floating auth form, shadow-xl for modals)",
+    "borders": "1px crisp slate borders (border-slate-200) with rounded-xl or rounded-2xl radii",
+    "glassmorphism": "bg-white/90 backdrop-blur-md border border-white/40 for floating widgets and topbar",
+    "micro_interactions": "Smooth scale-102 hover states on menu cards, status indicator pulses (animate-pulse green dot), transition-all duration-200 ease-in-out"
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color scheme: Crisp pure white canvas (#FFFFFF / #F8FAFC) accented with Dynamic Blue (#1D4ED8) for action elements and Organic Green (#15803D) for fresh/brand elements.",
+    "Implement the brand mark accurately: Green house-leaf mark inside a cream background box (#FDFBF7) with tagline 'Home-cooked. Planet-friendly.'",
+    "Ensure all interactive components (buttons, tabs, inputs, cards, status badges, dropdowns) contain comprehensive data-testid attributes (e.g. data-testid='signup-submit-button', data-testid='otp-input-1').",
+    "Build the split-screen auth cleanly with a 60% left section hosting the video showcase shadow box and a 40% right section hosting the auth floating card.",
+    "Include the exact legal compliance footer at the bottom of the auth screen and dashboard shell: 'Created by SystemNex Techsolutions LLP. All rights reserved. TM Number: 7810892'.",
+    "Ensure the sidebar supports both 'onboarding_mode' (lock icons on unverified pages) and 'activated_mode' (full navigation enabled).",
+    "Implement the 4-step onboarding wizard with progress tracker, drag-and-drop file upload UI, 20%+18% GST commission breakdown, and verification progress board.",
+    "Provide clear interactive states for Orders Kanban (Today/Upcoming/Completed) and Revenue Analytics with interactive charts."
+  ]
+}
