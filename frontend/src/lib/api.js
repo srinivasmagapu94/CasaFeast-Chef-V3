@@ -2,6 +2,7 @@ import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
+const CHEF_SERVICES_URL = process.env.REACT_APP_CASAFEAST_CHEF_SERVICES_URL;
 
 // Lightweight payload hash to simulate "Data in Transit Protection"
 function hashPayload(data) {
@@ -23,6 +24,7 @@ export function invalidateCache(prefix) {
 }
 
 export const apiClient = axios.create({ baseURL: API });
+export const chefServicesClient = axios.create({ baseURL: CHEF_SERVICES_URL });
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem("cf_token");

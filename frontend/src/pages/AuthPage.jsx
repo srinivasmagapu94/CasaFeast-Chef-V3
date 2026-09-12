@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
 } from "lucide-react";
-import apiClient from "@/lib/api";
+import apiClient, { chefServicesClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { LegalFooter } from "@/components/LegalFooter";
@@ -21,6 +21,8 @@ const STORY = [
   { img: "/story/order.jpeg", step: "03", tag: "ORDERS", title: "Receive & ship daily orders", desc: "Accept subscription orders and hand off to a delivery partner in one tap.", metric: ["Avg. orders/day", "40+"], color: "#D97706" },
   { img: "/story/earn.jpeg", step: "04", tag: "EARN", title: "Grow real monthly income", desc: "Track earnings, payouts and subscriptions — turn your cooking into a thriving business.", metric: ["Avg. monthly", "₹1.2L+"], color: "#15803D" },
 ];
+
+const MOBILE_VALIDATION_TOAST_ID = "mobile-validation-error";
 
 function VideoShowcase() {
   const [idx, setIdx] = useState(0);
@@ -165,34 +167,48 @@ export default function AuthPage() {
   const [flow, setFlow] = useState(null); // 'signup' | 'login'
   const [submitting, setSubmitting] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const mobileValidationId = useRef(0);
 
   useEffect(() => {
     if (chefUUID) navigate("/app");
   }, [chefUUID, navigate]);
 
   const validateMobile = async () => {
+    const validationId = ++mobileValidationId.current;
     const digits = form.mobileNumber.replace(/\D/g, "");
     if (digits.length !== 10) {
       setMobileValid(false);
       return;
     }
     try {
-      const res = await apiClient.get(`/validateMobileNumber/${digits}`);
-      setMobileValid(res.data.isMobileNumberValid);
-      if (!res.data.isMobileNumberValid) toast.error("Enter a valid 10-digit mobile number");
+      const res = await chefServicesClient.post(`/validateMobileNumber/${encodeURIComponent(digits)}`);
+      if (validationId !== mobileValidationId.current) return;
+      const isMobileNumberValid = res.data.mobileNumberValid === true;
+      setMobileValid(isMobileNumberValid);
+      if (isMobileNumberValid) {
+        toast.dismiss(MOBILE_VALIDATION_TOAST_ID);
+      } else {
+        toast.error("Account on this number already created, please login.", { id: MOBILE_VALIDATION_TOAST_ID });
+      }
     } catch {
+      if (validationId !== mobileValidationId.current) return;
       setMobileValid(false);
+      toast.error("Unable to validate this mobile number");
     }
   };
 
   const validateEmail = async () => {
     if (!form.email) return;
     try {
-      const res = await apiClient.get(`/validateEmail/${encodeURIComponent(form.email)}`);
-      setEmailValid(res.data.isEmailValid && res.data.accountStatus === "active");
-      if (!res.data.isEmailValid) toast.error("Enter a valid email address");
+      const res = await chefServicesClient.post(`/validateEmail/${encodeURIComponent(form.email)}`);
+      const isEmailValid = res.data.emailValid === true;
+      setEmailValid(isEmailValid);
+      if (!isEmailValid) {
+        toast.error("Account with this email already created, please login.");
+      }
     } catch {
       setEmailValid(false);
+      toast.error("Unable to validate this email address");
     }
   };
 
@@ -342,7 +358,7 @@ export default function AuthPage() {
                       <Input
                         data-testid="signup-mobile"
                         value={form.mobileNumber}
-                        onChange={(e) => { setForm({ ...form, mobileNumber: e.target.value }); setMobileValid(null); }}
+                        onChange={(e) => { mobileValidationId.current += 1; setForm({ ...form, mobileNumber: e.target.value }); setMobileValid(null); }}
                         onBlur={validateMobile}
                         maxLength={10}
                         placeholder="9876543210"
