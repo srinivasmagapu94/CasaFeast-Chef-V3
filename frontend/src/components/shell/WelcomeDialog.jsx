@@ -1,5 +1,5 @@
 import React from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PartyPopper, ArrowRight } from "lucide-react";
 
@@ -12,6 +12,7 @@ export function WelcomeDialog({ onGoOnboarding }) {
         onEscapeKeyDown={(e) => e.preventDefault()}
         data-testid="welcome-dialog"
       >
+        <DialogTitle className="sr-only">Welcome to Casafeast — complete onboarding</DialogTitle>
         <div className="text-center py-2">
           <div className="mx-auto h-16 w-16 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
             <PartyPopper className="h-8 w-8 text-[#15803D]" />

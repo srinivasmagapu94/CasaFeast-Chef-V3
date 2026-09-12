@@ -1,5 +1,6 @@
 """Casafeast Chef Portal — Backend API regression tests."""
 import os
+import uuid as uuid_lib
 import pytest
 import requests
 
@@ -172,8 +173,9 @@ def test_orders_and_actions(seeded):
     r = requests.post(f"{API}/orders/{oid3}/request-delivery")
     assert r.status_code == 200
     d = r.json()
-    assert d["deliveryMode"] == "dispatched"
-    assert d["deliveryPartner"] in ("Porter", "Rapido Business")
+    assert d["provider"] in ("Porter", "Rapido Business")
+    assert d["mode"] in ("simulated", "live")
+    assert "trackingId" in d
 
 
 # -------- Revenue --------
@@ -260,12 +262,114 @@ def test_support_ticket(seeded):
     assert r.json()["submitted"] is True
 
 
-# -------- Upload (simulated) --------
-def test_upload():
-    files = {"file": ("test.txt", b"hello world", "text/plain")}
-    r = requests.post(f"{API}/upload", files=files)
-    assert r.status_code == 200
+# -------- Upload (object storage) --------
+def test_upload_and_download(seeded):
+    payload = b"hello casafeast object storage"
+    files = {"file": ("test.txt", payload, "text/plain")}
+    r = requests.post(f"{API}/upload", params={"chefUUID": seeded["chefUUID"]}, files=files)
+    assert r.status_code == 200, r.text
     d = r.json()
     assert d["fileName"] == "test.txt"
-    assert d["size"] == 11
-    assert "fileId" in d and "url" in d
+    assert d["size"] == len(payload)
+    assert "fileId" in d and "url" in d and "path" in d
+    assert d["url"].startswith("/api/files/")
+    # download back and verify bytes
+    r2 = requests.get(f"{BASE_URL}{d['url']}")
+    assert r2.status_code == 200, r2.text
+    assert r2.content == payload
+
+
+def test_upload_png_and_download(seeded):
+    # minimal PNG signature
+    png_bytes = bytes.fromhex("89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6300010000000500010D0A2DB40000000049454E44AE426082")
+    files = {"file": ("kitchen.png", png_bytes, "image/png")}
+    r = requests.post(f"{API}/upload", params={"chefUUID": seeded["chefUUID"]}, files=files)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["contentType"] == "image/png"
+    r2 = requests.get(f"{BASE_URL}{d['url']}")
+    assert r2.status_code == 200
+    assert r2.content == png_bytes
+    assert r2.headers.get("content-type", "").startswith("image/png")
+
+
+def test_download_missing():
+    r = requests.get(f"{BASE_URL}/api/files/casafeast/uploads/nope/{uuid_lib.uuid4()}.png")
+    assert r.status_code == 404
+
+
+# -------- Live Delivery Dispatch --------
+def test_request_delivery_returns_dispatch(seeded):
+    orders = requests.get(f"{API}/orders", params={"chefUUID": seeded["chefUUID"]}).json()
+    target = next((o for o in orders if o["bucket"] in ("Today", "Upcoming")), orders[0])
+    oid = target["orderId"]
+    r = requests.post(f"{API}/orders/{oid}/request-delivery")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    for k in ("trackingId", "provider", "mode", "status", "partnerName", "partnerPhone", "vehicleNumber", "eta"):
+        assert k in d, f"missing {k} in dispatch"
+    assert d["mode"] in ("simulated", "live")
+    assert d["provider"] in ("Porter", "Rapido Business")
+    assert d["trackingId"].startswith("CFDX-")
+    # follow-up status
+    r2 = requests.get(f"{API}/orders/{oid}/delivery")
+    assert r2.status_code == 200
+    d2 = r2.json()
+    assert d2["trackingId"] == d["trackingId"]
+    assert d2["status"] in ["requested", "partner_assigned", "arriving_at_kitchen", "picked_up", "out_for_delivery", "delivered"]
+
+
+def test_delivery_status_missing_dispatch():
+    r = requests.get(f"{API}/orders/UNKNOWN_ORDER/delivery")
+    assert r.status_code == 404
+
+
+# -------- Payout Statements --------
+def test_payout_pdf(seeded):
+    r = requests.get(f"{API}/payout/{seeded['chefUUID']}/statement", params={"format": "pdf"})
+    assert r.status_code == 200, r.text
+    assert r.headers.get("content-type", "").startswith("application/pdf")
+    disp = r.headers.get("content-disposition", "")
+    assert "attachment" in disp and ".pdf" in disp
+    assert r.content[:4] == b"%PDF"
+
+
+def test_payout_csv(seeded):
+    r = requests.get(f"{API}/payout/{seeded['chefUUID']}/statement", params={"format": "csv"})
+    assert r.status_code == 200, r.text
+    assert r.headers.get("content-type", "").startswith("text/csv")
+    disp = r.headers.get("content-disposition", "")
+    assert "attachment" in disp and ".csv" in disp
+    body = r.content.decode("utf-8")
+    assert "Casafeast" in body
+    assert "Gross Revenue" in body
+    assert "Net Payout" in body
+    assert "Platform Commission (20%)" in body
+    assert "GST on Commission (18%)" in body
+
+
+def test_payout_unknown_chef():
+    r = requests.get(f"{API}/payout/no-such-chef/statement", params={"format": "pdf"})
+    assert r.status_code == 404
+
+
+# -------- Menu with uploaded image URL persists --------
+def test_menu_persists_image_url(seeded):
+    chef = seeded["chefUUID"]
+    # upload an image
+    files = {"file": ("mnu.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 20, "image/png")}
+    up = requests.post(f"{API}/upload", params={"chefUUID": chef}, files=files).json()
+    img_url = up["url"]
+    payload = {
+        "chefUUID": chef, "menuName": "TEST_ImgMenu", "itemTypes": ["Veg"],
+        "isAvailableForLunch": True,
+        "durations": [{"mealDuration": "Weekly 5-Days", "price": "1000", "dailyVolumeLimit": "10"}],
+        "isAddonAvailable": False, "addons": [], "isActive": True,
+        "menuImageUrl": img_url,
+    }
+    r = requests.post(f"{API}/menu", json=payload)
+    assert r.status_code == 200
+    m = r.json()
+    assert m["menuImageUrl"] == img_url
+    # cleanup
+    requests.delete(f"{API}/menu/{m['menuId']}")

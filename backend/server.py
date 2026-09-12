@@ -1,8 +1,10 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Response, Query
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import io
 import logging
 import random
 from pathlib import Path
@@ -13,6 +15,10 @@ from datetime import datetime, timezone, timedelta
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+import storage as objstore
+import delivery as delivery_svc
+import payout as payout_svc
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -270,18 +276,46 @@ async def support_ticket(req: SupportTicketRequest):
     return {"submitted": True, "ticketId": doc["ticketId"]}
 
 
-# ------------------------- File Upload (simulated) -------------------------
+# ------------------------- File Upload (persistent object storage) -------------------------
 @api_router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), chefUUID: str = Query("shared")):
     contents = await file.read()
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
+    path = f"{objstore.APP_NAME}/uploads/{chefUUID}/{uuid.uuid4()}.{ext}"
+    ctype = file.content_type or objstore.content_type_for(file.filename)
+    result = objstore.put_object(path, contents, ctype)
+    stored_path = result["path"]
     file_id = str(uuid.uuid4())
+    doc = {
+        "fileId": file_id,
+        "storage_path": stored_path,
+        "fileName": file.filename,
+        "content_type": ctype,
+        "size": result.get("size", len(contents)),
+        "is_deleted": False,
+        "chefUUID": chefUUID,
+        "uploadedAt": now_iso(),
+    }
+    await db.files.insert_one(doc)
     return {
         "fileId": file_id,
         "fileName": file.filename,
-        "size": len(contents),
-        "url": f"/uploads/{file_id}/{file.filename}",
-        "uploadedAt": now_iso(),
+        "size": doc["size"],
+        "path": stored_path,
+        "contentType": ctype,
+        "url": f"/api/files/{stored_path}",
     }
+
+
+@api_router.get("/files/{path:path}")
+async def download_file(path: str):
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False})
+    ctype = record.get("content_type") if record else None
+    try:
+        data, storage_ctype = objstore.get_object(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    return Response(content=data, media_type=ctype or storage_ctype)
 
 
 # ------------------------- Onboarding -------------------------
@@ -414,24 +448,36 @@ async def reject_order(orderId: str, req: RejectOrderRequest):
 
 
 @api_router.post("/orders/{orderId}/request-delivery")
-async def request_delivery(orderId: str):
-    partner = random.choice(["Porter", "Rapido Business"])
+async def request_delivery(orderId: str, preferred: Optional[str] = None):
+    order = await db.orders.find_one({"orderId": orderId})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    dispatch = delivery_svc.create_dispatch(order, preferred)
     await db.orders.update_one(
-        {"orderId": orderId}, {"$set": {"deliveryMode": "dispatched", "deliveryPartner": partner}}
+        {"orderId": orderId},
+        {"$set": {"deliveryMode": "dispatched", "deliveryPartner": dispatch["provider"], "dispatch": dispatch, "status": "accepted"}},
     )
-    return {"orderId": orderId, "deliveryMode": "dispatched", "deliveryPartner": partner}
+    return dispatch
+
+
+@api_router.get("/orders/{orderId}/delivery")
+async def delivery_status(orderId: str):
+    order = await db.orders.find_one({"orderId": orderId})
+    if not order or not order.get("dispatch"):
+        raise HTTPException(status_code=404, detail="No dispatch found")
+    dispatch = delivery_svc.advance_status(order["dispatch"])
+    await db.orders.update_one({"orderId": orderId}, {"$set": {"dispatch": dispatch}})
+    return dispatch
 
 
 # ------------------------- Revenue -------------------------
-@api_router.get("/revenue/{chefUUID}")
-async def revenue(chefUUID: str):
+async def _compute_revenue(chefUUID: str):
     orders = await db.orders.find({"chefUUID": chefUUID}).to_list(1000)
     completed = [o for o in orders if o.get("bucket") == "Completed"]
     gross = sum(float(o.get("orderValue", 0)) for o in completed)
     commission = round(gross * 0.20, 2)
     gst = round(commission * 0.18, 2)
     net = round(gross - commission - gst, 2)
-    # weekly trend
     trend = []
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     for i, d in enumerate(days):
@@ -452,6 +498,34 @@ async def revenue(chefUUID: str):
         "activeSubscriptions": subs,
         "weeklyTrend": trend,
     }
+
+
+@api_router.get("/revenue/{chefUUID}")
+async def revenue(chefUUID: str):
+    return await _compute_revenue(chefUUID)
+
+
+@api_router.get("/payout/{chefUUID}/statement")
+async def payout_statement(chefUUID: str, format: str = "pdf", month: Optional[str] = None):
+    chef = await db.chefs.find_one({"chefUUID": chefUUID})
+    if not chef:
+        raise HTTPException(status_code=404, detail="Chef not found")
+    data = await _compute_revenue(chefUUID)
+    month_label = month or datetime.now(timezone.utc).strftime("%B %Y")
+    safe = month_label.replace(" ", "_")
+    if format == "csv":
+        content = payout_svc.generate_csv(chef, data, month_label)
+        return StreamingResponse(
+            io.BytesIO(content.encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=Casafeast_Statement_{safe}.csv"},
+        )
+    pdf = payout_svc.generate_pdf(chef, data, month_label)
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Casafeast_Statement_{safe}.pdf"},
+    )
 
 
 # ------------------------- Admin -------------------------
@@ -598,6 +672,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        objstore.init_storage()
+        logger.info("Object storage initialized")
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
 
 
 @app.on_event("shutdown")

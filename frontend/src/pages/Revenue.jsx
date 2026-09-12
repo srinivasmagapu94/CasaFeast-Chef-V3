@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { TrendingUp, Wallet, Receipt, ShoppingBag, Loader2, PieChart as PieIcon } from "lucide-react";
+import { TrendingUp, Wallet, Receipt, ShoppingBag, Loader2, PieChart as PieIcon, FileDown, FileSpreadsheet } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import apiClient from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const PIE_COLORS = ["#1D4ED8", "#15803D", "#D97706"];
 
@@ -10,6 +12,27 @@ export default function Revenue() {
   const { chefUUID } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState("");
+
+  const download = async (format) => {
+    setDownloading(format);
+    try {
+      const res = await apiClient.get(`/payout/${chefUUID}/statement?format=${format}`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Casafeast_Statement.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} statement downloaded`);
+    } catch {
+      toast.error("Could not generate statement");
+    } finally {
+      setDownloading("");
+    }
+  };
 
   useEffect(() => {
     apiClient.get(`/revenue/${chefUUID}`).then((r) => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
@@ -28,8 +51,20 @@ export default function Revenue() {
 
   return (
     <div>
-      <h1 className="font-display font-extrabold text-2xl text-slate-900">Revenue Analytics</h1>
-      <p className="text-slate-500 text-sm mb-6">Earnings performance against the 20% + 18% GST commission model.</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-display font-extrabold text-2xl text-slate-900">Revenue Analytics</h1>
+          <p className="text-slate-500 text-sm mb-6">Earnings performance against the 20% + 18% GST commission model.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button data-testid="download-pdf" onClick={() => download("pdf")} disabled={!!downloading} className="bg-[#1D4ED8] hover:bg-[#1E40AF]">
+            {downloading === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} Statement PDF
+          </Button>
+          <Button data-testid="download-csv" onClick={() => download("csv")} disabled={!!downloading} variant="outline">
+            {downloading === "csv" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />} CSV
+          </Button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {kpis.map((k, i) => (

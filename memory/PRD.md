@@ -22,10 +22,9 @@ Enterprise Chef Portal frontend + backend for home chefs: split-screen auth (vid
 6. Orders kanban (Today/Upcoming/Completed) + revenue analytics with charts.
 
 ## Implemented (2026-06)
-- All 5 modules built and tested end-to-end (21/21 backend pytest, frontend E2E 100%).
-- Demo seed: 2 chefs (demo@casafeast.com activated, newchef@casafeast.com onboarding), 3 menus, 7 orders.
-- Admin console for verification/activation.
-- Fixes: WelcomeDialog suppressed on onboarding route; DialogDescription a11y.
+- All 5 modules built and tested end-to-end (iteration 1: 21/21 backend, frontend 100%).
+- Iteration 2 (29/29 backend, frontend 100%): real Emergent object-storage uploads (menu photos on Create/Edit + onboarding KYC/FSSAI/passbook docs, persisted + served via /api/files); auto-playing muted looping showcase video on auth; production-ready delivery dispatch layer (delivery.py) with tracking ID/status/partner details + tracking dialog (simulated mode until Porter/Rapido keys added, /orders/{id}/delivery status polling); downloadable monthly payout statements as PDF (reportlab) + CSV (payout.py) from Revenue.
+- Demo seed: 2 chefs (demo@casafeast.com activated, newchef@casafeast.com onboarding), 3 menus, 7 orders. Admin console at /admin.
 
 ## Simulated / Not Real
 - OTP delivery, Google captcha, file storage, delivery partner dispatch (Porter/Rapido), support webhook.

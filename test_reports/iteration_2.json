@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 2 regression + new-feature testing. Backend: 29/29 pytest cases passing against public REACT_APP_BACKEND_URL including new tests for (a) object-storage upload+download (txt + PNG bytes round-trip; 404 for missing path), (b) delivery dispatch endpoint returning trackingId/provider/mode='simulated'/status/partnerName/partnerPhone/vehicleNumber/eta + follow-up GET /api/orders/{id}/delivery, (c) payout PDF (%PDF header, application/pdf, Content-Disposition attachment) and CSV (Casafeast + Gross/Commission/GST/Net rows) + 404 for unknown chef, (d) create menu with menuImageUrl from prior /api/upload persists. Plus all previous 21 regressions (validate/login/loginVerify/chef/menus CRUD+toggle+soft-delete/orders accept-reject/revenue math/onboarding 4-step/admin verify/activate/reset/support ticket). Frontend E2E via Playwright: auto-play showcase-video has correct attributes (autoplay/muted/loop/playsInline) and src file returns 200 video/mp4 (~2.6MB), sign-in flow works (demo@casafeast.com + any 6-digit OTP + geo-simulate-visakhapatnam), Revenue page download-pdf produced valid %PDF and download-csv contained 'Casafeast — Monthly Earnings Statement' + Chef row, Orders → order-dispatch-CF1001 minted CFDX-XXXXXXXX tracking id and opened tracking-dialog with tracking-id + tracking-status ('Partner Assigned') and the tracking-refresh button; menu-image-upload-input on Create Menu accepted a PNG and preview img.src became the absolute {BACKEND}/api/files/casafeast/uploads/<chefUUID>/<uuid>.png with menu-image-upload-remove present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "OTP dialog / Tracking dialog / Reject dialog", "issues": ["Radix console warning: 'DialogContent requires a DialogTitle for the component to be accessible for screen reader users' — add DialogTitle (VisuallyHidden if needed) to OTPDialog, tracking-dialog and reject-dialog."]},
+      {"screen": "Auto-play video (Playwright headless only)", "issues": ["Chromium headless without proprietary codecs reports MEDIA_ERR_SRC_NOT_SUPPORTED (readyState=0, networkState=3, error.code=4) for /chef_showcase.mp4. Not a bug for real users — file is served correctly (video/mp4, 2.6MB, 200) and <video> has autoplay+muted+loop+playsInline. If you want deterministic headless playability, add a WebM source alongside the MP4 in <video>."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "(A11y) Add DialogTitle to all DialogContent instances (OTPDialog, tracking-dialog, reject-dialog) to remove Radix warnings.",
+    "(Optional) Provide a WebM fallback source for /chef_showcase.mp4 so it plays in headless Chromium (only affects automated tests; real users unaffected)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 690+ lines with routing for auth, onboarding, menu, orders, revenue, payout, admin, seed and file/upload. Time to split into routers (auth.py, files.py, menu.py, orders.py, revenue.py, admin.py, seed.py) for maintainability.",
+    "storage.py: init_storage stores _storage_key in a module global with no lock. Multiple concurrent requests during startup could all POST /init. Fine in practice but consider an asyncio.Lock or eager init at startup (already done in FastAPI on_event startup — good).",
+    "delivery.py: create_dispatch falls back from 'live' to 'simulated' silently on exception (mutates provider dict). Log the exception for observability once real Porter/Rapido keys are added.",
+    "payout.py: uses datetime.now() (local timezone) for the 'Generated' timestamp inside the PDF/CSV — use datetime.now(timezone.utc) for consistency with the rest of the app.",
+    "server.py:/api/orders/{id}/request-delivery only mutates deliveryPartner/dispatch/deliveryMode but does not update order.status — dispatched orders remain 'pending' unless explicitly accepted; consider auto-transitioning to 'accepted' or exposing status alongside dispatch state.",
+    "Frontend ImageUpload preview must have a stable data-testid like 'menu-image-upload-preview' on the <img> element (currently reachable but not officially exposed) — helpful for tests."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of listed testids/flows validated (auto-play attributes + revenue downloads + dispatch/tracking + menu image upload preview)."},
+  "test_credentials": "demo@casafeast.com (activated) / newchef@casafeast.com (onboarding). Any 6-digit OTP. Re-seed via POST /api/seed?force=true. Reset activation via POST /api/admin/reset/{chefUUID}.",
+  "seed_data_creation": "POST /api/seed?force=true executed multiple times during tests; creates 2 chefs, 3 menus, 7 orders. Tests also POST admin/reset for newchef when needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: REACT_APP_BACKEND_URL (culinary-ops-hub.preview.emergentagent.com). backend_test.py now covers all iteration-2 additions. For UI: OTP via page.focus('[data-testid=otp-input]') + keyboard.type; geofence datacenter denies location → click geo-simulate-visakhapatnam. Menu-image / kyc-upload / fssai-upload / bank-upload inputs are hidden (input[type=file].hidden) — use elem.set_input_files() directly (don't wait_for_selector visible). Onboarding Step-1 uses shadcn Select components for city+area (not free-text) — you must click the Select triggers and pick from the listbox before onboarding-next will proceed. Menu create submit requires the duration Plan Select dropdown to be picked. Backend already invoked /api/upload for all doc kinds during pytest so persistence is verified; the FileUpload component is shared across kyc/fssai/bank and validated on Create Menu preview.",
+  "rca of the issue": "N/A — all iteration-2 features (object storage upload+download, delivery dispatch with tracking, payout PDF+CSV, auto-play video config, menu image on Create) are working."
+}

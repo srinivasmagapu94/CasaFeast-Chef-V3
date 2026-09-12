@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ImageUpload } from "@/components/ImageUpload";
 
 export const DURATION_OPTIONS = ["Weekly 5-Days", "Monthly 20-Days", "Quarterly 60-Days"];
 export const ITEM_TYPES = ["Veg", "Non-Veg", "Jain"];
@@ -19,7 +20,7 @@ export function emptyMenu() {
   return {
     menuName: "", menuDescription: "", menuInclusions: "", priorHoursNotice: "24", isActive: true,
     itemTypes: [], isAvailableForBreakfast: false, isAvailableForLunch: false, isAvailableForDinner: false,
-    durations: [{ mealDuration: "", price: "", dailyVolumeLimit: "" }], isAddonAvailable: false, addons: [],
+    durations: [{ mealDuration: "", price: "", dailyVolumeLimit: "" }], isAddonAvailable: false, addons: [], menuImageUrl: "",
   };
 }
 
@@ -34,6 +35,7 @@ export function MenuFormFields({ data, setData }) {
 
   return (
     <div className="space-y-6">
+      <ImageUpload testid="menu-image-upload" value={data.menuImageUrl} onChange={(url) => setData({ ...data, menuImageUrl: url })} />
       <div className="grid grid-cols-1 gap-4">
         <div>
           <Label className="text-xs font-semibold text-slate-600">Menu Name</Label>

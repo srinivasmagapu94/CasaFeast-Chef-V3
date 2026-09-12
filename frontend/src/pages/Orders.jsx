@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
-import {
-  Search, Check, X, Truck, Loader2, Clock, Package, CalendarClock, CheckCircle2,
-} from "lucide-react";
+import { Search, Check, X, Truck, Loader2, Clock, Package, CalendarClock, CheckCircle2, MapPin, Phone, User2, RefreshCw } from "lucide-react";
 import apiClient, { invalidateCache } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -25,7 +23,7 @@ const STATUS_CLASS = {
   pending: "bg-amber-100 text-amber-700",
 };
 
-function OrderCard({ order, onAccept, onReject, onDispatch }) {
+function OrderCard({ order, onAccept, onReject, onDispatch, onTrack }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 hover:shadow-float transition-all" data-testid={`order-card-${order.orderId}`}>
       <div className="flex items-start justify-between">
@@ -46,7 +44,11 @@ function OrderCard({ order, onAccept, onReject, onDispatch }) {
 
       <div className="mt-3 flex items-center gap-1.5">
         {order.deliveryMode === "dispatched" ? (
-          <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1" data-testid={`order-dispatched-${order.orderId}`}><Truck className="h-3.5 w-3.5" /> Dispatched · {order.deliveryPartner}</span>
+          <div className="flex items-center gap-2 w-full" data-testid={`order-dispatched-${order.orderId}`}>
+            <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1"><Truck className="h-3.5 w-3.5" /> {order.deliveryPartner}</span>
+            {order.dispatch?.trackingId && <span className="text-[10px] font-mono text-slate-400">{order.dispatch.trackingId}</span>}
+            <button data-testid={`order-track-${order.orderId}`} onClick={() => onTrack(order)} className="ml-auto text-[11px] font-semibold text-[#1D4ED8] hover:underline">Track →</button>
+          </div>
         ) : (
           <span className="text-[11px] text-amber-600 font-medium">Delivery pending</span>
         )}
@@ -74,6 +76,13 @@ export default function Orders() {
   const [deliveryOnly, setDeliveryOnly] = useState(false);
   const [rejecting, setRejecting] = useState(null);
   const [reason, setReason] = useState("");
+  const [tracking, setTracking] = useState(null);
+  const [trackLoading, setTrackLoading] = useState(false);
+
+  const STATUS_LABELS = {
+    requested: "Requested", partner_assigned: "Partner Assigned", arriving_at_kitchen: "Arriving at Kitchen",
+    picked_up: "Picked Up", out_for_delivery: "Out for Delivery", delivered: "Delivered",
+  };
 
   const load = async () => {
     setLoading(true);
@@ -106,7 +115,17 @@ export default function Orders() {
   }, [orders, tab, q, slot, sub, deliveryOnly]);
 
   const onAccept = async (o) => { await apiClient.post(`/orders/${o.orderId}/accept`); invalidateCache("/orders"); toast.success("Order accepted — added to packaging queue"); load(); };
-  const onDispatch = async (o) => { const r = await apiClient.post(`/orders/${o.orderId}/request-delivery`); invalidateCache("/orders"); toast.success(`Delivery partner requested: ${r.data.deliveryPartner}`); load(); };
+  const onDispatch = async (o) => { const r = await apiClient.post(`/orders/${o.orderId}/request-delivery`); invalidateCache("/orders"); toast.success(`Delivery partner requested: ${r.data.provider} · ${r.data.trackingId}`); await load(); setTracking({ order: o, dispatch: r.data }); };
+  const openTracking = async (o) => {
+    setTracking({ order: o, dispatch: o.dispatch });
+    setTrackLoading(true);
+    try { const r = await apiClient.get(`/orders/${o.orderId}/delivery`); setTracking({ order: o, dispatch: r.data }); } catch {} finally { setTrackLoading(false); }
+  };
+  const refreshTracking = async () => {
+    if (!tracking) return;
+    setTrackLoading(true);
+    try { const r = await apiClient.get(`/orders/${tracking.order.orderId}/delivery`); setTracking({ order: tracking.order, dispatch: r.data }); } catch {} finally { setTrackLoading(false); }
+  };
   const submitReject = async () => { await apiClient.post(`/orders/${rejecting.orderId}/reject`, { reason }); invalidateCache("/orders"); toast.success("Order rejected"); setRejecting(null); setReason(""); load(); };
 
   return (
@@ -152,7 +171,7 @@ export default function Orders() {
         <div className="text-center py-20 text-slate-400" data-testid="orders-empty">No orders in this view.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filtered.map((o) => <OrderCard key={o.orderId} order={o} onAccept={onAccept} onReject={setRejecting} onDispatch={onDispatch} />)}
+          {filtered.map((o) => <OrderCard key={o.orderId} order={o} onAccept={onAccept} onReject={setRejecting} onDispatch={onDispatch} onTrack={openTracking} />)}
         </div>
       )}
 
@@ -164,6 +183,56 @@ export default function Orders() {
           <Button data-testid="reject-submit" onClick={submitReject} className="w-full bg-red-500 hover:bg-red-600">Confirm Rejection</Button>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!tracking} onOpenChange={(o) => !o && setTracking(null)}>
+        <DialogContent className="sm:max-w-md" data-testid="tracking-dialog">
+          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><Truck className="h-5 w-5 text-[#1D4ED8]" /> Live Delivery Tracking</DialogTitle></DialogHeader>
+          {tracking?.dispatch && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
+                <div>
+                  <div className="text-[11px] text-slate-400">Tracking ID</div>
+                  <div className="font-mono font-semibold text-slate-800" data-testid="tracking-id">{tracking.dispatch.trackingId}</div>
+                </div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${tracking.dispatch.mode === "live" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                  {tracking.dispatch.mode === "live" ? "LIVE" : "SIMULATED"}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="text-[11px] text-slate-400 mb-1">Current Status</div>
+                <div className="text-lg font-display font-bold text-[#15803D]" data-testid="tracking-status">
+                  {STATUS_LABELS[tracking.dispatch.status] || tracking.dispatch.status}
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full bg-[#15803D] transition-all" style={{ width: `${((Object.keys(STATUS_LABELS).indexOf(tracking.dispatch.status) + 1) / 6) * 100}%` }} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Info icon={Truck} label="Partner" value={tracking.dispatch.provider} />
+                <Info icon={User2} label="Rider" value={tracking.dispatch.partnerName} />
+                <Info icon={Phone} label="Contact" value={tracking.dispatch.partnerPhone} />
+                <Info icon={MapPin} label="Vehicle" value={tracking.dispatch.vehicleNumber} />
+              </div>
+              <div className="text-[11px] text-slate-400">ETA: {new Date(tracking.dispatch.eta).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+
+              <Button data-testid="tracking-refresh" onClick={refreshTracking} disabled={trackLoading} variant="outline" className="w-full">
+                {trackLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><RefreshCw className="h-4 w-4" /> Refresh Status</>)}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Info({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg bg-slate-50 px-3 py-2">
+      <div className="text-[10px] text-slate-400 flex items-center gap-1"><Icon className="h-3 w-3" /> {label}</div>
+      <div className="text-sm font-semibold text-slate-700 mt-0.5">{value}</div>
     </div>
   );
 }

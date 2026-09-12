@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck, TrendingUp, Clock3, Play, Loader2, ArrowRight, Phone, Mail, Sparkles,
+  ShieldCheck, TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
 } from "lucide-react";
 import apiClient from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -15,27 +15,28 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+const SHOWCASE_VIDEO = "/chef_showcase.mp4";
 const VIDEO_POSTER =
   "https://images.unsplash.com/photo-1758524151953-d87150127c63?crop=entropy&cs=srgb&fm=jpg&q=85&w=1200";
 
 function VideoShowcase() {
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-float bg-slate-900">
-      <div
-        className="absolute inset-0 bg-cover bg-center animate-kenburns"
-        style={{ backgroundImage: `url(${VIDEO_POSTER})` }}
+      <video
+        data-testid="showcase-video"
+        className="absolute inset-0 w-full h-full object-cover"
+        src={SHOWCASE_VIDEO}
+        poster={VIDEO_POSTER}
+        autoPlay
+        muted
+        loop
+        playsInline
       />
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/40 to-slate-900/20" />
       <div className="absolute top-6 left-6 flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-md px-3 py-1.5 border border-white/20">
         <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
         <span className="text-xs font-semibold text-white tracking-wide">AI SHOWCASE · LIVE</span>
       </div>
-      <button
-        data-testid="video-play-button"
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-float hover:scale-105 transition-transform"
-      >
-        <Play className="h-6 w-6 text-[#1D4ED8] fill-[#1D4ED8] ml-1" />
-      </button>
 
       <div className="absolute bottom-0 left-0 right-0 p-8">
         <p className="text-emerald-300 text-sm font-semibold tracking-wide mb-2 flex items-center gap-2">
