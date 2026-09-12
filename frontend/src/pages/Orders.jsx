@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
-import { Search, Check, X, Truck, Loader2, Clock, Package, CalendarClock, CheckCircle2, MapPin, Phone, User2, RefreshCw } from "lucide-react";
+import { Search, Check, X, Truck, Loader2, Clock, Package, CalendarClock, CheckCircle2, MapPin, Phone, User2, RefreshCw, CalendarDays } from "lucide-react";
 import apiClient, { invalidateCache } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -287,6 +287,8 @@ export default function Orders() {
                 </div>
               </div>
 
+              <MealCalendar order={details} />
+
               {details.postpone?.isPostponed && (
                 <div className={`rounded-xl border p-4 ${details.postpone.acknowledged ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50"}`} data-testid="details-postpone">
                   <div className="flex items-center gap-2 mb-2">
@@ -319,6 +321,87 @@ export default function Orders() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MealCalendar({ order }) {
+  const total = order.planTotalDays || 0;
+  const delivered = order.deliveredDays || 0;
+  if (!total) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const planDays = [];
+  for (let i = 0; i < total; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + (i - delivered));
+    planDays.push({ d, delivered: i < delivered });
+  }
+  const infoByKey = {};
+  planDays.forEach((x) => { infoByKey[x.d.toDateString()] = x; });
+
+  const nextDate = order.postpone?.isPostponed && order.postpone?.nextDeliveryDate
+    ? new Date(order.postpone.nextDeliveryDate)
+    : (planDays.find((x) => !x.delivered)?.d || null);
+  const postponedDate = order.postpone?.isPostponed && order.postpone?.postponedDate
+    ? new Date(order.postpone.postponedDate) : null;
+
+  const first = planDays[0].d;
+  const last = planDays[total - 1].d;
+  const start = new Date(first); start.setDate(first.getDate() - first.getDay());
+  const end = new Date(last); end.setDate(last.getDate() + (6 - last.getDay()));
+  const weeks = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const week = [];
+    for (let i = 0; i < 7; i++) { week.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+    weeks.push(week);
+  }
+  const sameDay = (a, b) => a && b && a.toDateString() === b.toDateString();
+  const monthLabel = `${first.toLocaleDateString("en-GB", { month: "short" })}${first.getMonth() !== last.getMonth() ? " – " + last.toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : " " + first.getFullYear()}`;
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4" data-testid="meal-calendar">
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-semibold text-sm text-slate-800 flex items-center gap-1.5">
+          <CalendarDays className="h-4 w-4 text-[#1D4ED8]" /> Delivery Schedule <span className="text-[11px] text-slate-400 font-normal">· {monthLabel}</span>
+        </span>
+        <div className="flex items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#1D4ED8]" /> Delivered</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-50 border border-emerald-300" /> Upcoming</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400 mb-1">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
+      </div>
+      <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7 gap-1">
+            {week.map((d, di) => {
+              const info = infoByKey[d.toDateString()];
+              const isNext = sameDay(d, nextDate);
+              const isPostponed = sameDay(d, postponedDate);
+              let cls = "text-slate-300";
+              let tid = "";
+              if (isPostponed) { cls = "bg-amber-100 text-amber-700 border border-amber-300 line-through font-semibold"; tid = "cal-postponed"; }
+              else if (info?.delivered) { cls = "bg-[#1D4ED8] text-white font-semibold"; tid = "cal-delivered"; }
+              else if (info) { cls = "bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold"; tid = "cal-upcoming"; }
+              return (
+                <div key={di} data-testid={tid || undefined} className={`h-8 rounded-lg flex items-center justify-center text-[11px] ${cls} ${isNext ? "ring-2 ring-[#15803D] ring-offset-1" : ""}`}>
+                  {d.getDate()}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {nextDate && (
+        <div className="text-[11px] text-slate-500 mt-2 flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full ring-2 ring-[#15803D]" />
+          Next meal: <span className="font-semibold text-[#15803D]" data-testid="cal-next-meal">{nextDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+        </div>
+      )}
     </div>
   );
 }
