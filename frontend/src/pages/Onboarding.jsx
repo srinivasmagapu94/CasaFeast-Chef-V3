@@ -5,7 +5,7 @@ import {
   Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned,
   ClipboardList, User, FileCheck2, Loader2, ChevronDown,
 } from "lucide-react";
-import apiClient from "@/lib/api";
+import apiClient, { chefServicesClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { FileUpload } from "@/components/FileUpload";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,6 @@ const AREAS = {
   Visakhapatnam: ["MVP Colony", "Gajuwaka", "Madhurawada", "Dwaraka Nagar"],
   Bangalore: ["Koramangala", "Indiranagar", "Whitefield", "HSR Layout"],
 };
-const FOOD_TYPES = ["Homemade Food", "Bakery", "Snacks", "Sweets", "Tiffins"];
 const CATEGORIES = ["Cooked Meals", "Bakery", "Beverages", "Snacks", "Dairy"];
 const DISH_OPTIONS = ["Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice" , "Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice"];
 const CUISINE_OPTIONS = ["South Indian", "Andhra", "North Indian", "Chinese", "Biryani", "Desserts"];
@@ -85,14 +84,39 @@ function MultiSelectField({ label, placeholder, options, value, onChange, testid
 }
 
 // ---------------- Step 1 ----------------
-function Step1({ data, setData }) {
-  const addFoodType = (ft) => {
-    if (data.foodTypes.find((f) => f.foodType === ft)) {
-      setData({ ...data, foodTypes: data.foodTypes.filter((f) => f.foodType !== ft) });
-    } else {
-      setData({ ...data, foodTypes: [...data.foodTypes, { foodType: ft, chefItem: [], chefCuisines: [] }] });
+function Step1({ data, setData, availableFoodTypes }) {
+  const addFoodType = (foodTypeItem) => {
+    const foodTypeName = typeof foodTypeItem === "string" ? foodTypeItem : foodTypeItem.foodType;
+    const existing = data.foodTypes.find((f) => f.foodType === foodTypeName);
+
+    if (existing) {
+      setData({
+        ...data,
+        foodTypes: data.foodTypes.filter((f) => f.foodType !== foodTypeName),
+      });
+      return;
     }
+
+    const nextFoodType = typeof foodTypeItem === "string"
+      ? {
+          foodType: foodTypeName,
+          foodTypeDescription: "",
+          foodTypeUUID: null,
+          chefItem: [],
+          chefCuisines: [],
+        }
+      : {
+          ...foodTypeItem,
+          chefItem: [],
+          chefCuisines: [],
+        };
+
+    setData({
+      ...data,
+      foodTypes: [...data.foodTypes, nextFoodType],
+    });
   };
+
   const updateFT = (i, key, arr) => {
     const copy = [...data.foodTypes];
     copy[i] = { ...copy[i], [key]: arr };
@@ -133,12 +157,12 @@ function Step1({ data, setData }) {
         <Label className="text-sm font-semibold text-slate-700">Inventory Mapping — Food Types</Label>
         <p className="text-xs text-slate-400 mb-2">Select one or more food tiers you'll offer.</p>
         <div className="flex flex-wrap gap-2">
-          {FOOD_TYPES.map((ft) => {
-            const on = data.foodTypes.find((f) => f.foodType === ft);
+          {availableFoodTypes.map((ft) => {
+            const on = data.foodTypes.find((f) => f.foodType === ft.foodType);
             return (
-              <button key={ft} data-testid={`foodtype-${ft.replace(/\s/g, "-").toLowerCase()}`} onClick={() => addFoodType(ft)}
+              <button key={ft.foodTypeUUID || ft.foodType} data-testid={`foodtype-${ft.foodType.replace(/\s/g, "-").toLowerCase()}`} onClick={() => addFoodType(ft)}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all ${on ? "bg-[#15803D] text-white border-[#15803D]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>
-                {ft}
+                {ft.foodType}
               </button>
             );
           })}
@@ -379,11 +403,25 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(chef?.onboardingSubmitted || false);
+  const [availableFoodTypes, setAvailableFoodTypes] = useState([]);
 
   const [s1, setS1] = useState({ city: "", area: "", priorExperience: false, hasFSSAI: false, foodTypes: [], acceptedTerms: false });
   const [s2, setS2] = useState({ firstName: chef?.firstName || "", lastName: chef?.lastName || "", phoneNumber: chef?.mobileNumber || "", email: chef?.email || "", gender: "", maritalStatus: "", isFamilyUnit: false, aadhaarNumber: "", kitchenAddress: { kitchenName: "", addressLine1: "", addressLine2: "", state: "", city: "", pincode: "" }, kycDocuments: [] });
   const [s3, setS3] = useState({ fssaiLicenseNumber: "", licenseStatus: "", expiryDate: "", approvedCategories: [], fssaiDocuments: [] });
   const [s4, setS4] = useState({ accountHolderName: "", bankName: "", accountNumber: "", ifscCode: "", passbookDocuments: [] });
+
+  useEffect(() => {
+    const loadFoodTypes = async () => {
+      try {
+        const res = await chefServicesClient.get("/fetchFoodTypes");
+        setAvailableFoodTypes(Array.isArray(res?.data?.foodTypes) ? res.data.foodTypes : []);
+      } catch (error) {
+        console.error("[Onboarding] failed to load food types", error);
+      }
+    };
+
+    loadFoodTypes();
+  }, []);
 
   if (submitted || chef?.onboardingSubmitted) {
     return <VerificationBoard chefUUID={chefUUID} />;
@@ -445,7 +483,7 @@ export default function Onboarding() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6 lg:p-8">
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
-            {step === 0 && <Step1 data={s1} setData={setS1} />}
+            {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} />}
             {step === 1 && <Step2 data={s2} setData={setS2} />}
             {step === 2 && <Step3 data={s3} setData={setS3} />}
             {step === 3 && <Step4 data={s4} setData={setS4} />}
