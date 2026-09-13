@@ -470,7 +470,21 @@ export default function Onboarding() {
     if (step === 0) {
       if (!s1.city || !s1.area) return toast.error("Select city and area");
       if (!s1.acceptedTerms) return toast.error("Please accept the commission terms to continue");
-      await apiClient.post("/onboarding/prescreening", { chefUUID, ...s1 });
+
+      const payload = {
+        chefUUID,
+        city: s1.city,
+        area: s1.area,
+        priorExperience: s1.priorExperience,
+        hasFSSAI: s1.hasFSSAI,
+        foodType: (s1.foodTypes || []).map((foodTypeEntry) => ({
+          foodType: foodTypeEntry.foodType,
+          chefItem: (foodTypeEntry.chefItem || []).map((item) => ({ item })),
+          chefCuisines: (foodTypeEntry.chefCuisines || []).map((cuisine) => ({ cuisine })),
+        })),
+      };
+
+      await chefServicesClient.post("/chefPreScreening", payload);
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
@@ -528,7 +542,7 @@ export default function Onboarding() {
           </Button>
           {step < 3 ? (
             <Button data-testid="onboarding-next" onClick={next} className="bg-[#1D4ED8] hover:bg-[#1E40AF]">
-              Continue <ChevronRight className="h-4 w-4" />
+              Save & Continue <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
             <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting} className="bg-[#15803D] hover:bg-[#166534]">
