@@ -54,12 +54,12 @@ function MultiSelectField({ label, placeholder, options, value, onChange, testid
           <Button
             data-testid={testid}
             variant="outline"
-            className="mt-1 w-full justify-between rounded-lg border-slate-200 bg-white px-3 py-2 h-auto text-left font-normal hover:bg-slate-50"
+            className="mt-1 w-full justify-between gap-2 rounded-lg border-slate-200 bg-white px-3 py-2 h-auto text-left font-normal hover:bg-slate-50"
           >
-            <span className={`line-clamp-1 ${selectedValues.length ? "text-slate-700" : "text-slate-400"}`}>
+            <span className={`min-w-0 flex-1 whitespace-normal break-words ${selectedValues.length ? "text-slate-700" : "text-slate-400"}`}>
               {selectedValues.length ? selectedValues.join(", ") : placeholder}
             </span>
-            <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+            <ChevronDown className="h-4 w-4 opacity-50 shrink-0 mt-0.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto">
