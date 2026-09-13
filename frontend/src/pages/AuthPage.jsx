@@ -219,11 +219,18 @@ export default function AuthPage() {
     }
     setSubmitting(true);
     try {
-      await apiClient.post("/signup", { ...form, captchaToken: "stub-captcha-token" });
+      const chefRes = await chefServicesClient.post("/saveChef", {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phoneNumber: form.mobileNumber,
+        captchaToken: "stub-captcha-token",
+      });
       const otpRes = await apiClient.post("/sendOTP", { mobileNumber: form.mobileNumber });
       setDemoOtp(otpRes.data.demoOtp);
       setFlow("signup");
       setOtpOpen(true);
+      return chefRes.data.chefUUID;
     } catch (e) {
       toast.error(e.response?.data?.detail || "Signup failed");
     } finally {
