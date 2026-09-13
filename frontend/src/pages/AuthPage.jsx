@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck, TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
+  TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
 } from "lucide-react";
 import apiClient, { chefServicesClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -423,10 +423,6 @@ export default function AuthPage() {
                       />
                     </div>
                     {mobileValid === true && <p className="text-[11px] text-emerald-600 mt-1">✓ Valid number — OTP ready</p>}
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span className="text-[11px] text-slate-500">Protected by Google Invisible Captcha (auto-verified)</span>
                   </div>
                   <TurnstileWidget onToken={setCaptchaToken} onError={setCaptchaToken} />
                   <Button
