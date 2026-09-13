@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned,
-  ClipboardList, User, FileCheck2, Loader2,
+  ClipboardList, User, FileCheck2, Loader2, ChevronDown,
 } from "lucide-react";
 import apiClient from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CITIES = ["Visakhapatnam", "Bangalore"];
@@ -23,6 +24,8 @@ const AREAS = {
 };
 const FOOD_TYPES = ["Homemade Food", "Bakery", "Snacks", "Sweets", "Tiffins"];
 const CATEGORIES = ["Cooked Meals", "Bakery", "Beverages", "Snacks", "Dairy"];
+const DISH_OPTIONS = ["Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice" , "Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice"];
+const CUISINE_OPTIONS = ["South Indian", "Andhra", "North Indian", "Chinese", "Biryani", "Desserts"];
 
 function StepBadge({ active, done, index, label, icon: Icon }) {
   return (
@@ -40,13 +43,54 @@ function StepBadge({ active, done, index, label, icon: Icon }) {
   );
 }
 
+function MultiSelectField({ label, placeholder, options, value, onChange, testid }) {
+  const selectedValues = (value || []).filter((item) => item && item.trim().length > 0);
+
+  return (
+    <div>
+      <Label className="text-[11px] text-slate-500">{label}</Label>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            data-testid={testid}
+            variant="outline"
+            className="mt-1 w-full justify-between rounded-lg border-slate-200 bg-white px-3 py-2 h-auto text-left font-normal hover:bg-slate-50"
+          >
+            <span className={`line-clamp-1 ${selectedValues.length ? "text-slate-700" : "text-slate-400"}`}>
+              {selectedValues.length ? selectedValues.join(", ") : placeholder}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto">
+          {options.map((option) => (
+            <DropdownMenuCheckboxItem
+              key={option}
+              checked={selectedValues.includes(option)}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  onChange([...selectedValues, option]);
+                } else {
+                  onChange(selectedValues.filter((item) => item !== option));
+                }
+              }}
+            >
+              {option}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 // ---------------- Step 1 ----------------
 function Step1({ data, setData }) {
   const addFoodType = (ft) => {
     if (data.foodTypes.find((f) => f.foodType === ft)) {
       setData({ ...data, foodTypes: data.foodTypes.filter((f) => f.foodType !== ft) });
     } else {
-      setData({ ...data, foodTypes: [...data.foodTypes, { foodType: ft, chefItem: [""], chefCuisines: [""] }] });
+      setData({ ...data, foodTypes: [...data.foodTypes, { foodType: ft, chefItem: [], chefCuisines: [] }] });
     }
   };
   const updateFT = (i, key, arr) => {
@@ -104,16 +148,22 @@ function Step1({ data, setData }) {
             <div key={ft.foodType} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="font-semibold text-sm text-slate-700 mb-2">{ft.foodType}</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-[11px] text-slate-500">Dishes (comma separated)</Label>
-                  <Input data-testid={`fooditem-${i}`} className="mt-1 bg-white" placeholder="Idli, Dosa, Biryani"
-                    value={ft.chefItem.join(", ")} onChange={(e) => updateFT(i, "chefItem", e.target.value.split(",").map((s) => s.trim()))} />
-                </div>
-                <div>
-                  <Label className="text-[11px] text-slate-500">Cuisines (comma separated)</Label>
-                  <Input data-testid={`foodcuisine-${i}`} className="mt-1 bg-white" placeholder="South Indian, Andhra"
-                    value={ft.chefCuisines.join(", ")} onChange={(e) => updateFT(i, "chefCuisines", e.target.value.split(",").map((s) => s.trim()))} />
-                </div>
+                <MultiSelectField
+                  label="Dishes (comma separated)"
+                  placeholder="Select dishes"
+                  options={DISH_OPTIONS}
+                  value={ft.chefItem}
+                  onChange={(value) => updateFT(i, "chefItem", value)}
+                  testid={`fooditem-${i}`}
+                />
+                <MultiSelectField
+                  label="Cuisines (comma separated)"
+                  placeholder="Select cuisines"
+                  options={CUISINE_OPTIONS}
+                  value={ft.chefCuisines}
+                  onChange={(value) => updateFT(i, "chefCuisines", value)}
+                  testid={`foodcuisine-${i}`}
+                />
               </div>
             </div>
           ))}
