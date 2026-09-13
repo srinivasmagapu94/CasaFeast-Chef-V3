@@ -162,11 +162,6 @@ function OTPDialog({ open, onClose, onVerify, demoOtp, verifying }) {
             Enter the 6-digit code we sent via SMS.
           </DialogDescription>
         </DialogHeader>
-        {demoOtp && (
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700" data-testid="demo-otp-hint">
-            Demo mode: use code <span className="font-mono font-bold">{demoOtp}</span> (any 6 digits work)
-          </div>
-        )}
         <div className="flex justify-center py-3">
           <InputOTP maxLength={6} value={otp} onChange={setOtp} data-testid="otp-input">
             <InputOTPGroup>
@@ -276,8 +271,6 @@ export default function AuthPage() {
         phoneNumber: form.mobileNumber,
         captchaToken,
       });
-      const otpRes = await apiClient.post("/sendOTP", { mobileNumber: form.mobileNumber });
-      setDemoOtp(otpRes.data.demoOtp);
       setFlow("signup");
       setOtpOpen(true);
       return chefRes.data.chefUUID;
@@ -310,9 +303,15 @@ export default function AuthPage() {
     setVerifying(true);
     try {
       if (flow === "signup") {
-        await apiClient.post("/verifyOTP", { mobileNumber: form.mobileNumber, otp });
-        const lres = await apiClient.post("/loginVerify", { identifier: form.mobileNumber, otp });
-        login(lres.data.token, lres.data.chefUUID);
+        const otpRes = await chefServicesClient.post("/verifyOTP", {
+          phoneNumber: form.mobileNumber,
+          otp,
+        });
+        if (!otpRes.data.otpValid) {
+          toast.error(otpRes.data.errorMessage || "OTP verification failed");
+          return;
+        }
+        return;
       } else {
         const lres = await apiClient.post("/loginVerify", { identifier: loginId, otp });
         login(lres.data.token, lres.data.chefUUID);
