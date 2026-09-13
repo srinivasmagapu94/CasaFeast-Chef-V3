@@ -2,7 +2,7 @@ import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
-const CHEF_SERVICES_URL = process.env.REACT_APP_CASAFEAST_CHEF_SERVICES_URL;
+const CHEF_SERVICES_URL = "http://localhost:8080/ws_casafeast_chef_services/chef";
 
 // Lightweight payload hash to simulate "Data in Transit Protection"
 function hashPayload(data) {
