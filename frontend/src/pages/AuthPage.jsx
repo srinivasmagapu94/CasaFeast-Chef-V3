@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { renderTurnstile, removeTurnstile } from "@/services/cloudflareTurnstile";
 
 const STORY = [
   { img: "/story/cook.jpeg", step: "01", tag: "COOK", title: "Cook what you love, from home", desc: "Prepare fresh homemade meals in your own kitchen — no restaurant, no overheads.", metric: ["Home kitchens", "100%"], color: "#15803D" },
@@ -23,6 +24,53 @@ const STORY = [
 ];
 
 const MOBILE_VALIDATION_TOAST_ID = "mobile-validation-error";
+const TURNSTILE_SITE_KEY = process.env.REACT_APP_CLOUDFLARE_TURNSTILE_SITE_KEY;
+
+function TurnstileWidget({ onToken, onError }) {
+  const containerRef = useRef(null);
+  const widgetPromiseRef = useRef(null);
+  const widgetIdRef = useRef(null);
+  const cleanupTimerRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(cleanupTimerRef.current);
+
+    if (widgetPromiseRef.current) return undefined;
+
+    widgetPromiseRef.current = renderTurnstile(containerRef.current, TURNSTILE_SITE_KEY, {
+      onToken: (token) => {
+        console.log("[Turnstile] token received", { hasToken: Boolean(token), length: token?.length || 0 });
+        onToken(token);
+      },
+      onExpired: () => {
+        console.warn("[Turnstile] token expired");
+        onToken("");
+      },
+      onError: () => {
+        console.error("[Turnstile] token generation failed");
+        onError("");
+      },
+    })
+      .then((id) => {
+        widgetIdRef.current = id;
+        return id;
+      })
+      .catch(() => {
+        onError("");
+        widgetPromiseRef.current = null;
+      });
+
+    return () => {
+      cleanupTimerRef.current = setTimeout(() => {
+        removeTurnstile(widgetIdRef.current);
+        widgetIdRef.current = null;
+        widgetPromiseRef.current = null;
+      }, 0);
+    };
+  }, [onToken, onError]);
+
+  return <div ref={containerRef} data-testid="turnstile-widget" />;
+}
 
 function VideoShowcase() {
   const [idx, setIdx] = useState(0);
@@ -167,6 +215,7 @@ export default function AuthPage() {
   const [flow, setFlow] = useState(null); // 'signup' | 'login'
   const [submitting, setSubmitting] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const mobileValidationId = useRef(0);
 
   useEffect(() => {
@@ -213,8 +262,9 @@ export default function AuthPage() {
   };
 
   const startSignup = async () => {
-    if (!form.firstName || !form.lastName || !form.email || !mobileValid) {
-      toast.error("Please complete all fields with a valid mobile number");
+    console.log("[Signup] captcha token state", { hasToken: Boolean(captchaToken), length: captchaToken.length });
+    if (!form.firstName || !form.lastName || !form.email || !mobileValid || !captchaToken) {
+      toast.error("Please complete all fields and verify the captcha");
       return;
     }
     setSubmitting(true);
@@ -224,7 +274,7 @@ export default function AuthPage() {
         lastName: form.lastName,
         email: form.email,
         phoneNumber: form.mobileNumber,
-        captchaToken: "stub-captcha-token",
+        captchaToken,
       });
       const otpRes = await apiClient.post("/sendOTP", { mobileNumber: form.mobileNumber });
       setDemoOtp(otpRes.data.demoOtp);
@@ -378,6 +428,7 @@ export default function AuthPage() {
                     <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span className="text-[11px] text-slate-500">Protected by Google Invisible Captcha (auto-verified)</span>
                   </div>
+                  <TurnstileWidget onToken={setCaptchaToken} onError={setCaptchaToken} />
                   <Button
                     data-testid="signup-submit-button"
                     onClick={startSignup}
