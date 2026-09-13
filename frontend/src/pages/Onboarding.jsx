@@ -179,7 +179,7 @@ function Step1({ data, setData, availableFoodTypes, availableItemTypes, availabl
               <div className="font-semibold text-sm text-slate-700 mb-2">{ft.foodType}</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <MultiSelectField
-                  label="Dishes (comma separated)"
+                  label="Item Types"
                   placeholder="Select dishes"
                   options={dishOptions}
                   value={ft.chefItem}
@@ -187,7 +187,7 @@ function Step1({ data, setData, availableFoodTypes, availableItemTypes, availabl
                   testid={`fooditem-${i}`}
                 />
                 <MultiSelectField
-                  label="Cuisines (comma separated)"
+                  label="Cuisines"
                   placeholder="Select cuisines"
                   options={cuisineOptions}
                   value={ft.chefCuisines}
