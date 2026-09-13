@@ -23,8 +23,6 @@ const AREAS = {
   Bangalore: ["Koramangala", "Indiranagar", "Whitefield", "HSR Layout"],
 };
 const CATEGORIES = ["Cooked Meals", "Bakery", "Beverages", "Snacks", "Dairy"];
-const DISH_OPTIONS = ["Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice" , "Idli", "Dosa", "Biryani", "Pongal", "Parotta", "Khichdi", "Curd Rice"];
-const CUISINE_OPTIONS = ["South Indian", "Andhra", "North Indian", "Chinese", "Biryani", "Desserts"];
 
 function StepBadge({ active, done, index, label, icon: Icon }) {
   return (
@@ -84,7 +82,15 @@ function MultiSelectField({ label, placeholder, options, value, onChange, testid
 }
 
 // ---------------- Step 1 ----------------
-function Step1({ data, setData, availableFoodTypes }) {
+function Step1({ data, setData, availableFoodTypes, availableItemTypes, availableCuisines }) {
+  const dishOptions = (availableItemTypes || [])
+    .map((item) => typeof item === "string" ? item : (item.itemType || item.itemTypeName || item.name || item.label))
+    .filter(Boolean);
+
+  const cuisineOptions = (availableCuisines || [])
+    .map((item) => typeof item === "string" ? item : (item.cuisine || item.cuisineName || item.name || item.label))
+    .filter(Boolean);
+
   const addFoodType = (foodTypeItem) => {
     const foodTypeName = typeof foodTypeItem === "string" ? foodTypeItem : foodTypeItem.foodType;
     const existing = data.foodTypes.find((f) => f.foodType === foodTypeName);
@@ -175,7 +181,7 @@ function Step1({ data, setData, availableFoodTypes }) {
                 <MultiSelectField
                   label="Dishes (comma separated)"
                   placeholder="Select dishes"
-                  options={DISH_OPTIONS}
+                  options={dishOptions}
                   value={ft.chefItem}
                   onChange={(value) => updateFT(i, "chefItem", value)}
                   testid={`fooditem-${i}`}
@@ -183,7 +189,7 @@ function Step1({ data, setData, availableFoodTypes }) {
                 <MultiSelectField
                   label="Cuisines (comma separated)"
                   placeholder="Select cuisines"
-                  options={CUISINE_OPTIONS}
+                  options={cuisineOptions}
                   value={ft.chefCuisines}
                   onChange={(value) => updateFT(i, "chefCuisines", value)}
                   testid={`foodcuisine-${i}`}
@@ -404,6 +410,8 @@ export default function Onboarding() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(chef?.onboardingSubmitted || false);
   const [availableFoodTypes, setAvailableFoodTypes] = useState([]);
+  const [availableItemTypes, setAvailableItemTypes] = useState([]);
+  const [availableCuisines, setAvailableCuisines] = useState([]);
 
   const [s1, setS1] = useState({ city: "", area: "", priorExperience: false, hasFSSAI: false, foodTypes: [], acceptedTerms: false });
   const [s2, setS2] = useState({ firstName: chef?.firstName || "", lastName: chef?.lastName || "", phoneNumber: chef?.mobileNumber || "", email: chef?.email || "", gender: "", maritalStatus: "", isFamilyUnit: false, aadhaarNumber: "", kitchenAddress: { kitchenName: "", addressLine1: "", addressLine2: "", state: "", city: "", pincode: "" }, kycDocuments: [] });
@@ -411,16 +419,40 @@ export default function Onboarding() {
   const [s4, setS4] = useState({ accountHolderName: "", bankName: "", accountNumber: "", ifscCode: "", passbookDocuments: [] });
 
   useEffect(() => {
-    const loadFoodTypes = async () => {
-      try {
-        const res = await chefServicesClient.get("/fetchFoodTypes");
-        setAvailableFoodTypes(Array.isArray(res?.data?.foodTypes) ? res.data.foodTypes : []);
-      } catch (error) {
-        console.error("[Onboarding] failed to load food types", error);
+    const loadOnboardingOptions = async () => {
+      const extractList = (res, field) => {
+        const data = res?.data;
+        if (Array.isArray(data?.[field])) return data[field];
+        if (Array.isArray(data)) return data;
+        return [];
+      };
+
+      const [foodTypesRes, itemTypesRes, cuisinesRes] = await Promise.allSettled([
+        chefServicesClient.get("/fetchFoodTypes"),
+        chefServicesClient.get("/fetchItemTypes"),
+        chefServicesClient.get("/fetchCuisines"),
+      ]);
+
+      if (foodTypesRes.status === "fulfilled") {
+        setAvailableFoodTypes(extractList(foodTypesRes.value, "foodTypes"));
+      } else {
+        console.error("[Onboarding] failed to load food types", foodTypesRes.reason);
+      }
+
+      if (itemTypesRes.status === "fulfilled") {
+        setAvailableItemTypes(extractList(itemTypesRes.value, "itemTypes"));
+      } else {
+        console.error("[Onboarding] failed to load item types", itemTypesRes.reason);
+      }
+
+      if (cuisinesRes.status === "fulfilled") {
+        setAvailableCuisines(extractList(cuisinesRes.value, "cuisines"));
+      } else {
+        console.error("[Onboarding] failed to load cuisines", cuisinesRes.reason);
       }
     };
 
-    loadFoodTypes();
+    loadOnboardingOptions();
   }, []);
 
   if (submitted || chef?.onboardingSubmitted) {
@@ -483,7 +515,7 @@ export default function Onboarding() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6 lg:p-8">
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
-            {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} />}
+            {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
             {step === 1 && <Step2 data={s2} setData={setS2} />}
             {step === 2 && <Step3 data={s3} setData={setS3} />}
             {step === 3 && <Step4 data={s4} setData={setS4} />}
