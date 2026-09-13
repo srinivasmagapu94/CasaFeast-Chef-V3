@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { apiClient, invalidateCache } from "@/lib/api";
+import { chefServicesClient, invalidateCache } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
@@ -19,9 +19,19 @@ export function AuthProvider({ children }) {
     }
     try {
       invalidateCache(`/chef/${uuid}`);
-      const res = await apiClient.get(`/chef/${uuid}`);
-      setChef(res.data);
-      return res.data;
+      const res = await chefServicesClient.get(`/${uuid}/chefDetails`);
+      const data = res.data || {};
+      const mappedChef = {
+        ...data,
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        mobileNumber: data.phoneNumber || data.mobileNumber || "",
+        email: data.email || "",
+        accountStatus: data.accountStatus || "",
+        isActivated: data.isActivated ?? (data.accountStatus ? ["ACTIVE", "ACTIVE_ACCOUNT", "Approved", "APPROVED"].includes(String(data.accountStatus).toUpperCase()) : false),
+      };
+      setChef(mappedChef);
+      return mappedChef;
     } catch (e) {
       setChef(null);
       return null;
