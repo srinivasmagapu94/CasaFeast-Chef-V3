@@ -199,7 +199,7 @@ function OTPDialog({ open, onClose, onVerify, demoOtp, verifying }) {
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { login, chefUUID } = useAuth();
+  const { login, chefUUID, setChefUUID } = useAuth();
   const [mode, setMode] = useState("signup"); // signup | login
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", mobileNumber: "" });
   const [loginId, setLoginId] = useState("");
@@ -311,7 +311,8 @@ export default function AuthPage() {
           toast.error(otpRes.data.errorMessage || "OTP verification failed");
           return;
         }
-        return;
+        localStorage.setItem("cf_uuid", otpRes.data.chefUUID);
+        setChefUUID(otpRes.data.chefUUID);
       } else {
         const lres = await apiClient.post("/loginVerify", { identifier: loginId, otp });
         login(lres.data.token, lres.data.chefUUID);

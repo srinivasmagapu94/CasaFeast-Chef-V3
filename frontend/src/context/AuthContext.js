@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ chefUUID, chef, loading, login, logout, refreshChef, geoAllowed, geoZone, setGeo }}
+      value={{ chefUUID, chef, loading, login, logout, refreshChef, geoAllowed, geoZone, setGeo, setChefUUID }}
     >
       {children}
     </AuthContext.Provider>
