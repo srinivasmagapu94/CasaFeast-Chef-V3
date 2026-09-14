@@ -314,8 +314,16 @@ export default function AuthPage() {
         localStorage.setItem("cf_uuid", otpRes.data.chefUUID);
         setChefUUID(otpRes.data.chefUUID);
       } else {
-        const lres = await apiClient.post("/loginVerify", { identifier: loginId, otp });
-        login(lres.data.token, lres.data.chefUUID);
+        const otpRes = await chefServicesClient.post("/verifyOTP", {
+          phoneNumber: loginId,
+          otp,
+        });
+        if (!otpRes.data.otpValid) {
+          toast.error(otpRes.data.errorMessage || "OTP verification failed");
+          return;
+        }
+        localStorage.setItem("cf_uuid", otpRes.data.chefUUID);
+        setChefUUID(otpRes.data.chefUUID);
       }
       setOtpOpen(false);
       toast.success("Verified! Checking your location…");

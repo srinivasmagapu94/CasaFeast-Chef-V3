@@ -683,7 +683,7 @@ export default function Onboarding() {
     loadSavedPreScreening();
   }, [chefUUID, normalizeOnboardingDetails, normalizePreScreeningResponse]);
 
-  if (submitted || chef?.onboardingSubmitted) {
+  if (submitted || chef?.onboardingSubmitted || isUnderReview) {
     return <VerificationBoard chefUUID={chefUUID} />;
   }
 
