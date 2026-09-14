@@ -28,6 +28,7 @@ export function AuthProvider({ children }) {
         mobileNumber: data.phoneNumber || data.mobileNumber || "",
         email: data.email || "",
         accountStatus: data.accountStatus || "",
+        verificationStatus: data.verificationStatus || "",
         isActivated: data.isActivated ?? (data.accountStatus ? ["ACTIVE", "ACTIVE_ACCOUNT", "Approved", "APPROVED"].includes(String(data.accountStatus).toUpperCase()) : false),
       };
       setChef(mappedChef);
