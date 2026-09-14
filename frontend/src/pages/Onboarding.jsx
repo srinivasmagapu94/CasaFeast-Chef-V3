@@ -22,7 +22,6 @@ const AREAS = {
   Visakhapatnam: ["MVP Colony", "Gajuwaka", "Madhurawada", "Dwaraka Nagar"],
   Bangalore: ["Koramangala", "Indiranagar", "Whitefield", "HSR Layout"],
 };
-const CATEGORIES = ["Cooked Meals", "Bakery", "Beverages", "Snacks", "Dairy"];
 
 function StepBadge({ active, done, index, label, icon: Icon }) {
   return (
@@ -305,10 +304,10 @@ function Step2({ data, setData, chefUUID }) {
 }
 
 // ---------------- Step 3 ----------------
-function Step3({ data, setData, chefUUID }) {
-  const toggleCat = (c) => {
-    const on = data.approvedCategories.includes(c);
-    setData({ ...data, approvedCategories: on ? data.approvedCategories.filter((x) => x !== c) : [...data.approvedCategories, c] });
+function Step3({ data, setData, chefUUID, fssaiProductCategories }) {
+  const toggleCat = (productName) => {
+    const on = data.approvedCategories.includes(productName);
+    setData({ ...data, approvedCategories: on ? data.approvedCategories.filter((x) => x !== productName) : [...data.approvedCategories, productName] });
   };
   return (
     <div className="space-y-5">
@@ -328,17 +327,32 @@ function Step3({ data, setData, chefUUID }) {
       </div>
       <div>
         <Label className="text-sm font-semibold text-slate-700">Approved Product Categories</Label>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {CATEGORIES.map((c) => {
-            const on = data.approvedCategories.includes(c);
-            return (
-              <button key={c} data-testid={`fssai-cat-${c.replace(/\s/g, "-").toLowerCase()}`} onClick={() => toggleCat(c)}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all ${on ? "bg-[#1D4ED8] text-white border-[#1D4ED8]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>
-                {c}
-              </button>
-            );
-          })}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" data-testid="fssai-categories" className="mt-2 h-auto w-full justify-between gap-2 py-2 font-normal hover:bg-emerald-100 hover:text-emerald-800">
+              <span className={`min-w-0 flex-1 whitespace-normal break-words text-left ${data.approvedCategories.length ? "text-slate-700" : "text-slate-400"}`}>
+                {data.approvedCategories.length ? data.approvedCategories.join(", ") : "Select product categories"}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+            {fssaiProductCategories.map((category) => (
+              <DropdownMenuCheckboxItem
+                key={category.productName}
+                data-testid={`fssai-cat-${category.productName.replace(/\s/g, "-").toLowerCase()}`}
+                checked={data.approvedCategories.includes(category.productName)}
+                onCheckedChange={() => toggleCat(category.productName)}
+                className="data-[highlighted]:bg-emerald-100 data-[highlighted]:text-emerald-800 data-[state=checked]:bg-emerald-100 data-[state=checked]:text-emerald-800"
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span>{category.productName}</span>
+                  <span className="text-xs text-slate-500">{category.productDescription}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <FileUpload label="FSSAI Certificate (PDF)" accept="PDF" testid="fssai-upload"
         files={data.fssaiDocuments} onChange={(f) => setData({ ...data, fssaiDocuments: f })}
@@ -440,6 +454,7 @@ export default function Onboarding() {
   const [availableFoodTypes, setAvailableFoodTypes] = useState([]);
   const [availableItemTypes, setAvailableItemTypes] = useState([]);
   const [availableCuisines, setAvailableCuisines] = useState([]);
+  const [fssaiProductCategories, setFssaiProductCategories] = useState([]);
 
   const [s1, setS1] = useState({ city: "", area: "", priorExperience: false, hasFSSAI: false, foodTypes: [], acceptedTerms: false });
   const [s2, setS2] = useState({ firstName: chef?.firstName || "", lastName: chef?.lastName || "", phoneNumber: chef?.mobileNumber || "", email: chef?.email || "", gender: "", maritalStatus: "", isFamilyUnit: false, aadhaarNumber: "", kitchenAddress: { kitchenName: "", addressLine1: "", addressLine2: "", state: "", city: "", pincode: "" }, kycDocuments: [] });
@@ -597,10 +612,11 @@ export default function Onboarding() {
         return [];
       };
 
-      const [foodTypesRes, itemTypesRes, cuisinesRes] = await Promise.allSettled([
+      const [foodTypesRes, itemTypesRes, cuisinesRes, fssaiCategoriesRes] = await Promise.allSettled([
         chefServicesClient.get("/fetchFoodTypes"),
         chefServicesClient.get("/fetchItemTypes"),
         chefServicesClient.get("/fetchCuisines"),
+        chefServicesClient.get("/fetchFSSAIProductCategories"),
       ]);
 
       if (foodTypesRes.status === "fulfilled") {
@@ -619,6 +635,12 @@ export default function Onboarding() {
         setAvailableCuisines(extractList(cuisinesRes.value, "cuisines"));
       } else {
         console.error("[Onboarding] failed to load cuisines", cuisinesRes.reason);
+      }
+
+      if (fssaiCategoriesRes.status === "fulfilled") {
+        setFssaiProductCategories(extractList(fssaiCategoriesRes.value, "fssaiProductCategories"));
+      } else {
+        console.error("[Onboarding] failed to load FSSAI product categories", fssaiCategoriesRes.reason);
       }
     };
 
@@ -766,7 +788,7 @@ export default function Onboarding() {
         fssaiNumber: s3.fssaiLicenseNumber,
         licenseStatus: s3.licenseStatus,
         expiryDate: s3.expiryDate,
-        chefApprovedFSSAIProductCategories: s3.approvedCategories,
+        chefApprovedFSSAIProductCategories: [...s3.approvedCategories],
         chefUUID,
       });
       setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
@@ -811,14 +833,14 @@ export default function Onboarding() {
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
             {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
             {step === 1 && <Step2 data={s2} setData={setS2} chefUUID={chefUUID} />}
-            {step === 2 && <Step3 data={s3} setData={setS3} chefUUID={chefUUID} />}
+            {step === 2 && <Step3 data={s3} setData={setS3} chefUUID={chefUUID} fssaiProductCategories={fssaiProductCategories} />}
             {step === 3 && <Step4 data={s4} setData={setS4} />}
           </motion.div>
         </AnimatePresence>
 
         <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100 gap-4">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500">
+            <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500 focus:bg-transparent active:bg-emerald-100 active:text-emerald-800">
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
             {step < 3 && (
@@ -826,7 +848,7 @@ export default function Onboarding() {
                 variant="ghost"
                 data-testid="onboarding-next"
                 onClick={goToNextStep}
-                className="text-slate-500"
+                className="text-slate-500 focus:bg-transparent active:bg-emerald-100 active:text-emerald-800"
               >
                 Next <ChevronRight className="h-4 w-4" />
               </Button>
