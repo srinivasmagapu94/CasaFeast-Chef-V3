@@ -362,7 +362,7 @@ function Step3({ data, setData, chefUUID, fssaiProductCategories }) {
 }
 
 // ---------------- Step 4 ----------------
-function Step4({ data, setData }) {
+function Step4({ data, setData, chefUUID }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -372,7 +372,8 @@ function Step4({ data, setData }) {
         <Field label="IFSC Code" testid="bank-ifsc" value={data.ifscCode} onChange={(v) => setData({ ...data, ifscCode: v })} />
       </div>
       <FileUpload label="Passbook / Cancelled Cheque Proof" accept="PDF, JPG, PNG" testid="bank-upload"
-        files={data.passbookDocuments} onChange={(f) => setData({ ...data, passbookDocuments: f })} />
+        files={data.passbookDocuments} onChange={(f) => setData({ ...data, passbookDocuments: f })}
+        externalUpload={{ fieldName: "bankDocument", path: `/${chefUUID}/uploadBankDocument` }} />
     </div>
   );
 }
@@ -834,7 +835,7 @@ export default function Onboarding() {
             {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
             {step === 1 && <Step2 data={s2} setData={setS2} chefUUID={chefUUID} />}
             {step === 2 && <Step3 data={s3} setData={setS3} chefUUID={chefUUID} fssaiProductCategories={fssaiProductCategories} />}
-            {step === 3 && <Step4 data={s4} setData={setS4} />}
+            {step === 3 && <Step4 data={s4} setData={setS4} chefUUID={chefUUID} />}
           </motion.div>
         </AnimatePresence>
 
