@@ -576,6 +576,8 @@ export default function Onboarding() {
     toast.success("Progress saved");
   };
 
+  const goToNextStep = () => setStep(step + 1);
+
   const submit = async () => {
     if (!s4.accountHolderName || !s4.accountNumber || !s4.ifscCode) return toast.error("Fill bank details");
     setSubmitting(true);
@@ -615,12 +617,24 @@ export default function Onboarding() {
         </AnimatePresence>
 
         <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100 gap-4">
-          <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500">
-            <ChevronLeft className="h-4 w-4" /> Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500">
+              <ChevronLeft className="h-4 w-4" /> Back
+            </Button>
+            {step < 3 && (
+              <Button
+                variant="ghost"
+                data-testid="onboarding-next"
+                onClick={goToNextStep}
+                className="text-slate-500"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
           {step < 3 ? (
             <Button
-              data-testid="onboarding-next"
+              data-testid="onboarding-continue"
               onClick={next}
               disabled={isStepZeroDisabled}
               className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
