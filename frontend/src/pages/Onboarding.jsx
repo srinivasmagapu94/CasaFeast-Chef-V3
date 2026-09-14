@@ -305,7 +305,7 @@ function Step2({ data, setData, chefUUID }) {
 }
 
 // ---------------- Step 3 ----------------
-function Step3({ data, setData }) {
+function Step3({ data, setData, chefUUID }) {
   const toggleCat = (c) => {
     const on = data.approvedCategories.includes(c);
     setData({ ...data, approvedCategories: on ? data.approvedCategories.filter((x) => x !== c) : [...data.approvedCategories, c] });
@@ -341,7 +341,8 @@ function Step3({ data, setData }) {
         </div>
       </div>
       <FileUpload label="FSSAI Certificate (PDF)" accept="PDF" testid="fssai-upload"
-        files={data.fssaiDocuments} onChange={(f) => setData({ ...data, fssaiDocuments: f })} />
+        files={data.fssaiDocuments} onChange={(f) => setData({ ...data, fssaiDocuments: f })}
+        externalUpload={{ fieldName: "fssaiDocument", path: `/${chefUUID}/fssaiDocument` }} />
     </div>
   );
 }
@@ -804,7 +805,7 @@ export default function Onboarding() {
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
             {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
             {step === 1 && <Step2 data={s2} setData={setS2} chefUUID={chefUUID} />}
-            {step === 2 && <Step3 data={s3} setData={setS3} />}
+            {step === 2 && <Step3 data={s3} setData={setS3} chefUUID={chefUUID} />}
             {step === 3 && <Step4 data={s4} setData={setS4} />}
           </motion.div>
         </AnimatePresence>
