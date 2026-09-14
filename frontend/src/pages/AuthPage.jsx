@@ -288,7 +288,7 @@ export default function AuthPage() {
     }
     setSubmitting(true);
     try {
-      const res = await apiClient.post("/login", { identifier: loginId });
+      const res = await chefServicesClient.post("/chefLogin", { phoneNumber: loginId });
       setDemoOtp(res.data.demoOtp);
       setFlow("login");
       setOtpOpen(true);
