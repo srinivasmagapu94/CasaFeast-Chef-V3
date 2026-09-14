@@ -762,7 +762,13 @@ export default function Onboarding() {
     }
     if (step === 2) {
       if (!s3.fssaiLicenseNumber) return toast.error("Enter FSSAI license number");
-      await apiClient.post("/onboarding/fssai", { chefUUID, ...s3 });
+      await chefServicesClient.post("/chefFSSAIDetails", {
+        fssaiNumber: s3.fssaiLicenseNumber,
+        licenseStatus: s3.licenseStatus,
+        expiryDate: s3.expiryDate,
+        chefApprovedFSSAIProductCategories: s3.approvedCategories,
+        chefUUID,
+      });
       setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
     }
     setStep(step + 1);
