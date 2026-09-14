@@ -445,6 +445,7 @@ export default function Onboarding() {
   const [s3, setS3] = useState({ fssaiLicenseNumber: "", licenseStatus: "", expiryDate: "", approvedCategories: [], fssaiDocuments: [] });
   const [s4, setS4] = useState({ accountHolderName: "", bankName: "", accountNumber: "", ifscCode: "", passbookDocuments: [] });
   const [savedPreScreening, setSavedPreScreening] = useState(null);
+  const [savedSteps, setSavedSteps] = useState({ stepTwo: null, stepThree: null, stepFour: null });
 
   const normalizePreScreeningResponse = useCallback((response) => {
     const normalizeFoodTypeEntry = (entry = {}) => {
@@ -497,6 +498,95 @@ export default function Onboarding() {
       .sort((a, b) => a.foodType.localeCompare(b.foodType)),
   });
 
+  const normalizeDocuments = (documents) => (Array.isArray(documents) ? documents : documents ? [documents] : [])
+    .map((document) => {
+      if (typeof document === "string") return { fileId: document, fileName: document, size: 0 };
+      return {
+        fileId: document.fileId || document.id || document.fileUUID || document.uuid || document.url || document.fileName || document.name || "",
+        fileName: document.fileName || document.name || document.originalFilename || document.filename || "",
+        size: document.size || 0,
+      };
+    })
+    .filter((document) => document.fileId || document.fileName);
+
+  const normalizeOnboardingDetails = useCallback((response) => {
+    const body = response?.data?.data || response?.data || response || {};
+    const personal = body.chefPersonalDetails || body.personalDetails || body.chefPersonal || body;
+    const kitchenDetails = Array.isArray(personal.kitchenDetails) ? personal.kitchenDetails[0] : null;
+    const kitchen = kitchenDetails || personal.kitchenAddress || {};
+    const fssai = body.fssaiDetails || body.fssai || body;
+    const bank = body.bankDetails || body.bank || body;
+
+    return {
+      stepTwo: {
+        firstName: personal.firstName || "",
+        lastName: personal.lastName || "",
+        phoneNumber: personal.phoneNumber || personal.mobileNumber || "",
+        email: personal.email || personal.emailAddress || "",
+        gender: personal.gender || "",
+        maritalStatus: personal.maritalStatus || "",
+        isFamilyUnit: !!personal.isFamilyUnit,
+        aadhaarNumber: personal.aadhaarNumber || "",
+        kitchenAddress: {
+          kitchenName: kitchen.kitchenName || "",
+          addressLine1: kitchen.kitchenAddressLine1 || kitchen.addressLine1 || "",
+          addressLine2: kitchen.kitchenAddressLine2 || kitchen.addressLine2 || "",
+          state: kitchen.kitchenState || kitchen.state || "",
+          city: kitchen.kitchenCity || kitchen.city || "",
+          pincode: kitchen.kitchenPincode || kitchen.pincode || "",
+        },
+        kycDocuments: normalizeDocuments(personal.kycDocuments || body.kycDocuments || body.kycDocument),
+      },
+      stepThree: {
+        fssaiLicenseNumber: fssai.fssaiLicenseNumber || "",
+        licenseStatus: fssai.licenseStatus || "",
+        expiryDate: fssai.expiryDate || "",
+        approvedCategories: fssai.approvedCategories || [],
+        fssaiDocuments: normalizeDocuments(fssai.fssaiDocuments || body.fssaiDocuments || body.fssaiDocument),
+      },
+      stepFour: {
+        accountHolderName: bank.accountHolderName || "",
+        bankName: bank.bankName || "",
+        accountNumber: bank.accountNumber || "",
+        ifscCode: bank.ifscCode || "",
+        passbookDocuments: normalizeDocuments(bank.passbookDocuments || body.passbookDocuments || body.passbookDocument),
+      },
+    };
+  }, []);
+
+  const buildComparableDocuments = (documents) => normalizeDocuments(documents)
+    .map((document) => ({ fileId: document.fileId, fileName: document.fileName, size: document.size }))
+    .sort((a, b) => `${a.fileId}${a.fileName}`.localeCompare(`${b.fileId}${b.fileName}`));
+
+  const buildComparableStepTwo = (value) => ({
+    firstName: value?.firstName || "",
+    lastName: value?.lastName || "",
+    phoneNumber: value?.phoneNumber || "",
+    email: value?.email || "",
+    gender: value?.gender || "",
+    maritalStatus: value?.maritalStatus || "",
+    isFamilyUnit: !!value?.isFamilyUnit,
+    aadhaarNumber: value?.aadhaarNumber || "",
+    kitchenAddress: value?.kitchenAddress || {},
+    kycDocuments: buildComparableDocuments(value?.kycDocuments),
+  });
+
+  const buildComparableStepThree = (value) => ({
+    fssaiLicenseNumber: value?.fssaiLicenseNumber || "",
+    licenseStatus: value?.licenseStatus || "",
+    expiryDate: value?.expiryDate || "",
+    approvedCategories: [...(value?.approvedCategories || [])].sort(),
+    fssaiDocuments: buildComparableDocuments(value?.fssaiDocuments),
+  });
+
+  const buildComparableStepFour = (value) => ({
+    accountHolderName: value?.accountHolderName || "",
+    bankName: value?.bankName || "",
+    accountNumber: value?.accountNumber || "",
+    ifscCode: value?.ifscCode || "",
+    passbookDocuments: buildComparableDocuments(value?.passbookDocuments),
+  });
+
   useEffect(() => {
     const loadOnboardingOptions = async () => {
       const extractList = (res, field) => {
@@ -537,8 +627,28 @@ export default function Onboarding() {
       try {
         const response = await chefServicesClient.get(`/chefOnboardingDetails/${chefUUID}`);
         const nextPreScreening = normalizePreScreeningResponse(response);
+        const savedDetails = normalizeOnboardingDetails(response);
+        const hasStepTwoDetails = savedDetails.stepTwo.firstName || savedDetails.stepTwo.lastName || savedDetails.stepTwo.phoneNumber
+          || savedDetails.stepTwo.email || savedDetails.stepTwo.gender || savedDetails.stepTwo.aadhaarNumber
+          || savedDetails.stepTwo.kitchenAddress.kitchenName || savedDetails.stepTwo.kycDocuments.length > 0;
+        const hasStepThreeDetails = savedDetails.stepThree.fssaiLicenseNumber || savedDetails.stepThree.licenseStatus
+          || savedDetails.stepThree.expiryDate || savedDetails.stepThree.approvedCategories.length > 0
+          || savedDetails.stepThree.fssaiDocuments.length > 0;
+        const hasStepFourDetails = savedDetails.stepFour.accountHolderName || savedDetails.stepFour.bankName
+          || savedDetails.stepFour.accountNumber || savedDetails.stepFour.ifscCode
+          || savedDetails.stepFour.passbookDocuments.length > 0;
         setSavedPreScreening(nextPreScreening);
+        setSavedSteps({
+          stepTwo: hasStepTwoDetails ? savedDetails.stepTwo : null,
+          stepThree: hasStepThreeDetails ? savedDetails.stepThree : null,
+          stepFour: hasStepFourDetails ? savedDetails.stepFour : null,
+        });
         setS1((prev) => ({ ...prev, ...nextPreScreening }));
+        if (hasStepTwoDetails) {
+          setS2((prev) => ({ ...prev, ...savedDetails.stepTwo, kitchenAddress: { ...prev.kitchenAddress, ...savedDetails.stepTwo.kitchenAddress } }));
+        }
+        if (hasStepThreeDetails) setS3((prev) => ({ ...prev, ...savedDetails.stepThree }));
+        if (hasStepFourDetails) setS4((prev) => ({ ...prev, ...savedDetails.stepFour }));
       } catch (error) {
         console.error("[Onboarding] failed to load saved pre-screening", error);
       }
@@ -546,7 +656,7 @@ export default function Onboarding() {
 
     loadOnboardingOptions();
     loadSavedPreScreening();
-  }, [chefUUID, normalizePreScreeningResponse]);
+  }, [chefUUID, normalizeOnboardingDetails, normalizePreScreeningResponse]);
 
   if (submitted || chef?.onboardingSubmitted) {
     return <VerificationBoard chefUUID={chefUUID} />;
@@ -561,7 +671,28 @@ export default function Onboarding() {
   );
 
   const isStepZeroUnchanged = hasSavedPreScreening && JSON.stringify(buildComparableStepOne(s1)) === JSON.stringify(buildComparableStepOne(savedPreScreening));
-  const stepZeroButtonLabel = hasSavedPreScreening ? "Update & Continue" : "Save & Continue";
+  const hasSavedStepTwo = !!savedSteps.stepTwo && (
+    savedSteps.stepTwo.firstName || savedSteps.stepTwo.lastName || savedSteps.stepTwo.phoneNumber
+    || savedSteps.stepTwo.email || savedSteps.stepTwo.gender || savedSteps.stepTwo.aadhaarNumber
+    || savedSteps.stepTwo.kitchenAddress.kitchenName || savedSteps.stepTwo.kycDocuments.length > 0
+  );
+  const hasSavedStepThree = !!savedSteps.stepThree && (
+    savedSteps.stepThree.fssaiLicenseNumber || savedSteps.stepThree.licenseStatus
+    || savedSteps.stepThree.expiryDate || savedSteps.stepThree.approvedCategories.length > 0
+    || savedSteps.stepThree.fssaiDocuments.length > 0
+  );
+  const hasSavedStepFour = !!savedSteps.stepFour && (
+    savedSteps.stepFour.accountHolderName || savedSteps.stepFour.bankName || savedSteps.stepFour.accountNumber
+    || savedSteps.stepFour.ifscCode || savedSteps.stepFour.passbookDocuments.length > 0
+  );
+  const savedStepFlags = [hasSavedPreScreening, hasSavedStepTwo, hasSavedStepThree, hasSavedStepFour];
+  const currentStepUnchanged = [
+    isStepZeroUnchanged,
+    hasSavedStepTwo && JSON.stringify(buildComparableStepTwo(s2)) === JSON.stringify(buildComparableStepTwo(savedSteps.stepTwo)),
+    hasSavedStepThree && JSON.stringify(buildComparableStepThree(s3)) === JSON.stringify(buildComparableStepThree(savedSteps.stepThree)),
+    hasSavedStepFour && JSON.stringify(buildComparableStepFour(s4)) === JSON.stringify(buildComparableStepFour(savedSteps.stepFour)),
+  ][step];
+  const stepButtonLabel = savedStepFlags[step] ? "Update & Continue" : "Save & Continue";
   const isStepOneComplete = !!s1.city && !!s1.area && !!s1.acceptedTerms && (s1.foodTypes || []).length > 0 && s1.foodTypes.every((foodType) => (
     (foodType.chefItem || []).length > 0 && (foodType.chefCuisines || []).length > 0
   ));
@@ -574,7 +705,7 @@ export default function Onboarding() {
   const isStepFourComplete = !!s4.accountHolderName && !!s4.bankName && !!s4.accountNumber && !!s4.ifscCode
     && (s4.passbookDocuments || []).length > 0;
   const isCurrentStepIncomplete = [!isStepOneComplete, !isStepTwoComplete, !isStepThreeComplete, !isStepFourComplete][step];
-  const isStepZeroDisabled = step === 0 && ((hasSavedPreScreening && isStepZeroUnchanged) || !isStepOneComplete);
+  const isCurrentStepDisabled = isCurrentStepIncomplete || (savedStepFlags[step] && currentStepUnchanged);
 
   const steps = [
     { label: "Pre-Screening", icon: ClipboardList },
@@ -602,6 +733,7 @@ export default function Onboarding() {
       };
 
       await chefServicesClient.post("/chefPreScreening", payload);
+      setSavedPreScreening(s1);
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
@@ -625,10 +757,12 @@ export default function Onboarding() {
           kitchenPincode: s2.kitchenAddress.pincode,
         }],
       });
+      setSavedSteps((previous) => ({ ...previous, stepTwo: s2 }));
     }
     if (step === 2) {
       if (!s3.fssaiLicenseNumber) return toast.error("Enter FSSAI license number");
       await apiClient.post("/onboarding/fssai", { chefUUID, ...s3 });
+      setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
     }
     setStep(step + 1);
     toast.success("Progress saved");
@@ -641,6 +775,7 @@ export default function Onboarding() {
     setSubmitting(true);
     try {
       await apiClient.post("/onboarding/bank", { chefUUID, ...s4 });
+      setSavedSteps((previous) => ({ ...previous, stepFour: s4 }));
       setSubmitted(true);
       toast.success("Onboarding submitted for verification!");
     } catch {
@@ -694,13 +829,13 @@ export default function Onboarding() {
             <Button
               data-testid="onboarding-continue"
               onClick={next}
-              disabled={step === 0 ? isStepZeroDisabled : isCurrentStepIncomplete}
+              disabled={isCurrentStepDisabled}
               className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
             >
-              {step === 0 ? stepZeroButtonLabel : "Save & Continue"} <ChevronRight className="h-4 w-4" />
+              {stepButtonLabel} <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepIncomplete} className="bg-[#15803D] hover:bg-[#166534]">
+            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepDisabled} className="bg-[#15803D] hover:bg-[#166534]">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Submit for Verification <Check className="h-4 w-4" /></>)}
             </Button>
           )}
