@@ -232,10 +232,10 @@ function Step2({ data, setData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="First Name" testid="p-firstname" value={data.firstName} onChange={(v) => setData({ ...data, firstName: v })} />
-        <Field label="Last Name" testid="p-lastname" value={data.lastName} onChange={(v) => setData({ ...data, lastName: v })} />
-        <Field label="Phone Number" testid="p-phone" value={data.phoneNumber} onChange={(v) => setData({ ...data, phoneNumber: v })} />
-        <Field label="Email Address" testid="p-email" value={data.email} onChange={(v) => setData({ ...data, email: v })} />
+        <Field label="First Name" testid="p-firstname" value={data.firstName} onChange={(v) => setData({ ...data, firstName: v })} disabled />
+        <Field label="Last Name" testid="p-lastname" value={data.lastName} onChange={(v) => setData({ ...data, lastName: v })} disabled />
+        <Field label="Phone Number" testid="p-phone" value={data.phoneNumber} onChange={(v) => setData({ ...data, phoneNumber: v })} disabled />
+        <Field label="Email Address" testid="p-email" value={data.email} onChange={(v) => setData({ ...data, email: v })} disabled />
         <div>
           <Label className="text-xs font-semibold text-slate-600">Gender</Label>
           <Select value={data.gender} onValueChange={(v) => setData({ ...data, gender: v })}>
@@ -335,11 +335,11 @@ function Step4({ data, setData }) {
   );
 }
 
-function Field({ label, testid, value, onChange }) {
+function Field({ label, testid, value, onChange, disabled = false }) {
   return (
     <div>
       <Label className="text-xs font-semibold text-slate-600">{label}</Label>
-      <Input data-testid={testid} className="mt-1" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input data-testid={testid} className="mt-1" value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
     </div>
   );
 }
