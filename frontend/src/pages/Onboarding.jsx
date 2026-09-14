@@ -804,7 +804,13 @@ export default function Onboarding() {
     if (!s4.accountHolderName || !s4.accountNumber || !s4.ifscCode) return toast.error("Fill bank details");
     setSubmitting(true);
     try {
-      await apiClient.post("/onboarding/bank", { chefUUID, ...s4 });
+      await chefServicesClient.post("/chefBankDetails", {
+        accountHolderName: s4.accountHolderName,
+        bankName: s4.bankName,
+        accountNumber: s4.accountNumber,
+        ifscCode: s4.ifscCode,
+        chefUUID,
+      });
       setSavedSteps((previous) => ({ ...previous, stepFour: s4 }));
       setSubmitted(true);
       toast.success("Onboarding submitted for verification!");
