@@ -531,8 +531,8 @@ export default function Onboarding() {
     const personal = body.chefPersonalDetails || body.personalDetails || body.chefPersonal || body;
     const kitchenDetails = Array.isArray(personal.kitchenDetails) ? personal.kitchenDetails[0] : null;
     const kitchen = kitchenDetails || personal.kitchenAddress || {};
-    const fssai = body.fssaiDetails || body.fssai || body;
-    const bank = body.bankDetails || body.bank || body;
+    const fssai = body.chefFSSAIDetails || body.fssaiDetails || body.fssai || body;
+    const bank = body.chefBankDetails || body.bankDetails || body.bank || body;
 
     return {
       stepTwo: {
@@ -555,10 +555,10 @@ export default function Onboarding() {
         kycDocuments: normalizeDocuments(personal.kycDocuments || body.kycDocuments || body.kycDocument),
       },
       stepThree: {
-        fssaiLicenseNumber: fssai.fssaiLicenseNumber || "",
+        fssaiLicenseNumber: fssai.fssaiNumber || fssai.fssaiLicenseNumber || "",
         licenseStatus: fssai.licenseStatus || "",
         expiryDate: fssai.expiryDate || "",
-        approvedCategories: fssai.approvedCategories || [],
+        approvedCategories: fssai.approvedProductCategories || fssai.approvedCategories || [],
         fssaiDocuments: normalizeDocuments(fssai.fssaiDocuments || body.fssaiDocuments || body.fssaiDocument),
       },
       stepFour: {
