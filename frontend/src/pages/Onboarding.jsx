@@ -561,7 +561,19 @@ export default function Onboarding() {
 
   const isStepZeroUnchanged = hasSavedPreScreening && JSON.stringify(buildComparableStepOne(s1)) === JSON.stringify(buildComparableStepOne(savedPreScreening));
   const stepZeroButtonLabel = hasSavedPreScreening ? "Update & Continue" : "Save & Continue";
-  const isStepZeroDisabled = step === 0 && hasSavedPreScreening && isStepZeroUnchanged;
+  const isStepOneComplete = !!s1.city && !!s1.area && !!s1.acceptedTerms && (s1.foodTypes || []).length > 0 && s1.foodTypes.every((foodType) => (
+    (foodType.chefItem || []).length > 0 && (foodType.chefCuisines || []).length > 0
+  ));
+  const isStepTwoComplete = !!s2.firstName && !!s2.lastName && !!s2.phoneNumber && !!s2.email && !!s2.gender && !!s2.maritalStatus
+    && !!s2.aadhaarNumber && !!s2.kitchenAddress.kitchenName && !!s2.kitchenAddress.addressLine1
+    && !!s2.kitchenAddress.addressLine2 && !!s2.kitchenAddress.state && !!s2.kitchenAddress.city
+    && !!s2.kitchenAddress.pincode && (s2.kycDocuments || []).length > 0;
+  const isStepThreeComplete = !!s3.fssaiLicenseNumber && !!s3.licenseStatus && !!s3.expiryDate
+    && (s3.approvedCategories || []).length > 0 && (s3.fssaiDocuments || []).length > 0;
+  const isStepFourComplete = !!s4.accountHolderName && !!s4.bankName && !!s4.accountNumber && !!s4.ifscCode
+    && (s4.passbookDocuments || []).length > 0;
+  const isCurrentStepIncomplete = [!isStepOneComplete, !isStepTwoComplete, !isStepThreeComplete, !isStepFourComplete][step];
+  const isStepZeroDisabled = step === 0 && ((hasSavedPreScreening && isStepZeroUnchanged) || !isStepOneComplete);
 
   const steps = [
     { label: "Pre-Screening", icon: ClipboardList },
@@ -662,13 +674,13 @@ export default function Onboarding() {
             <Button
               data-testid="onboarding-continue"
               onClick={next}
-              disabled={isStepZeroDisabled}
+              disabled={step === 0 ? isStepZeroDisabled : isCurrentStepIncomplete}
               className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
             >
               {step === 0 ? stepZeroButtonLabel : "Save & Continue"} <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting} className="bg-[#15803D] hover:bg-[#166534]">
+            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepIncomplete} className="bg-[#15803D] hover:bg-[#166534]">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Submit for Verification <Check className="h-4 w-4" /></>)}
             </Button>
           )}
