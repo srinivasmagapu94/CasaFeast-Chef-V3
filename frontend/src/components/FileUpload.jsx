@@ -1,9 +1,9 @@
 import React, { useRef, useState } from "react";
 import { UploadCloud, File as FileIcon, Trash2, CheckCircle2, Loader2 } from "lucide-react";
-import apiClient from "@/lib/api";
+import apiClient, { chefServicesClient } from "@/lib/api";
 import { toast } from "sonner";
 
-export function FileUpload({ label, accept, files, onChange, testid }) {
+export function FileUpload({ label, accept, files, onChange, testid, externalUpload }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -16,9 +16,20 @@ export function FileUpload({ label, accept, files, onChange, testid }) {
       const uploaded = [];
       for (const f of arr) {
         const fd = new FormData();
-        fd.append("file", f);
-        const res = await apiClient.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-        uploaded.push(res.data);
+        if (externalUpload) {
+          fd.append(externalUpload.fieldName, f);
+          const res = await chefServicesClient.post(externalUpload.path, fd, { headers: { "Content-Type": "multipart/form-data" } });
+          const responseFile = res.data?.file || res.data?.data || res.data;
+          uploaded.push({
+            fileId: responseFile?.fileId || responseFile?.id || `${f.name}-${f.lastModified}`,
+            fileName: responseFile?.fileName || responseFile?.name || f.name,
+            size: responseFile?.size || f.size,
+          });
+        } else {
+          fd.append("file", f);
+          const res = await apiClient.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+          uploaded.push(res.data);
+        }
       }
       onChange([...(files || []), ...uploaded]);
       toast.success("File uploaded");

@@ -227,7 +227,7 @@ function Step1({ data, setData, availableFoodTypes, availableItemTypes, availabl
 }
 
 // ---------------- Step 2 ----------------
-function Step2({ data, setData }) {
+function Step2({ data, setData, chefUUID }) {
   const setAddr = (k, v) => setData({ ...data, kitchenAddress: { ...data.kitchenAddress, [k]: v } });
   return (
     <div className="space-y-5">
@@ -298,7 +298,8 @@ function Step2({ data, setData }) {
       </div>
 
       <FileUpload label="KYC Documents (Aadhaar / PAN)" accept="PDF, JPG, PNG" testid="kyc-upload"
-        files={data.kycDocuments} onChange={(f) => setData({ ...data, kycDocuments: f })} />
+        files={data.kycDocuments} onChange={(f) => setData({ ...data, kycDocuments: f })}
+        externalUpload={{ fieldName: "kycDocument", path: `/${chefUUID}/uploadKYCDocument` }} />
     </div>
   );
 }
@@ -648,7 +649,7 @@ export default function Onboarding() {
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
             {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
-            {step === 1 && <Step2 data={s2} setData={setS2} />}
+            {step === 1 && <Step2 data={s2} setData={setS2} chefUUID={chefUUID} />}
             {step === 2 && <Step3 data={s3} setData={setS3} />}
             {step === 3 && <Step4 data={s4} setData={setS4} />}
           </motion.div>
