@@ -265,8 +265,34 @@ function Step2({ data, setData }) {
           <Field label="Kitchen Name" testid="k-name" value={data.kitchenAddress.kitchenName} onChange={(v) => setAddr("kitchenName", v)} />
           <Field label="Address Line 1" testid="k-addr1" value={data.kitchenAddress.addressLine1} onChange={(v) => setAddr("addressLine1", v)} />
           <Field label="Address Line 2" testid="k-addr2" value={data.kitchenAddress.addressLine2} onChange={(v) => setAddr("addressLine2", v)} />
-          <Field label="State" testid="k-state" value={data.kitchenAddress.state} onChange={(v) => setAddr("state", v)} />
-          <Field label="City" testid="k-city" value={data.kitchenAddress.city} onChange={(v) => setAddr("city", v)} />
+          <div>
+            <Label className="text-xs font-semibold text-slate-600">State</Label>
+            <Select
+              value={data.kitchenAddress.state}
+              onValueChange={(state) => setData({
+                ...data,
+                kitchenAddress: {
+                  ...data.kitchenAddress,
+                  state,
+                  city: state === "Karnataka" ? "Bangalore" : "Visakhapatnam",
+                },
+              })}
+            >
+              <SelectTrigger data-testid="k-state" className="mt-1"><SelectValue placeholder="Select state" /></SelectTrigger>
+              <SelectContent>{["Andhra Pradesh", "Karnataka"].map((state) => <SelectItem key={state} value={state}>{state}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-slate-600">City</Label>
+            <Select value={data.kitchenAddress.city} onValueChange={(v) => setAddr("city", v)}>
+              <SelectTrigger data-testid="k-city" className="mt-1"><SelectValue placeholder="Select city" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={data.kitchenAddress.state === "Karnataka" ? "Bangalore" : "Visakhapatnam"}>
+                  {data.kitchenAddress.state === "Karnataka" ? "Bangalore" : "Visakhapatnam"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Field label="Pincode" testid="k-pincode" value={data.kitchenAddress.pincode} onChange={(v) => setAddr("pincode", v)} />
         </div>
       </div>
