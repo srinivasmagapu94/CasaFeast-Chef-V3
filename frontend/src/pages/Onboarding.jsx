@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -417,6 +417,58 @@ export default function Onboarding() {
   const [s2, setS2] = useState({ firstName: chef?.firstName || "", lastName: chef?.lastName || "", phoneNumber: chef?.mobileNumber || "", email: chef?.email || "", gender: "", maritalStatus: "", isFamilyUnit: false, aadhaarNumber: "", kitchenAddress: { kitchenName: "", addressLine1: "", addressLine2: "", state: "", city: "", pincode: "" }, kycDocuments: [] });
   const [s3, setS3] = useState({ fssaiLicenseNumber: "", licenseStatus: "", expiryDate: "", approvedCategories: [], fssaiDocuments: [] });
   const [s4, setS4] = useState({ accountHolderName: "", bankName: "", accountNumber: "", ifscCode: "", passbookDocuments: [] });
+  const [savedPreScreening, setSavedPreScreening] = useState(null);
+
+  const normalizePreScreeningResponse = useCallback((response) => {
+    const normalizeFoodTypeEntry = (entry = {}) => {
+      const foodTypeName = entry.foodType || entry.foodTypeName || entry.name || "";
+      const chefItem = (entry.chefItem ?? entry.chefItems ?? entry.itemTypes ?? entry.items ?? [])
+        .map((item) => typeof item === "string" ? item : (item.item || item.itemType || item.itemTypeName || item.name || item.label || ""))
+        .filter(Boolean);
+      const chefCuisines = (entry.chefCuisines ?? entry.specialtyCuisines ?? entry.cuisines ?? [])
+        .map((item) => typeof item === "string" ? item : (item.cuisine || item.cuisineName || item.name || item.label || ""))
+        .filter(Boolean);
+
+      return {
+        ...entry,
+        foodType: foodTypeName,
+        foodTypeDescription: entry.foodTypeDescription || "",
+        foodTypeUUID: entry.foodTypeUUID || entry.foodTypeId || entry.id || null,
+        chefItem,
+        chefCuisines,
+      };
+    };
+
+    const preScreening = response?.data?.chefPreScreening || response?.data || response || {};
+    const selectedFoodTypes = Array.isArray(preScreening.foodTypes)
+      ? preScreening.foodTypes
+      : (Array.isArray(preScreening.chefFoodTypes)
+        ? preScreening.chefFoodTypes
+        : (Array.isArray(preScreening.foodType) ? preScreening.foodType : []));
+
+    return {
+      city: preScreening.city || "",
+      area: preScreening.area || "",
+      priorExperience: !!preScreening.priorExperience,
+      hasFSSAI: !!preScreening.hasFSSAI,
+      foodTypes: selectedFoodTypes.map(normalizeFoodTypeEntry),
+      acceptedTerms: true,
+    };
+  }, []);
+
+  const buildComparableStepOne = (value) => ({
+    city: value?.city || "",
+    area: value?.area || "",
+    priorExperience: !!value?.priorExperience,
+    hasFSSAI: !!value?.hasFSSAI,
+    foodTypes: (value?.foodTypes || [])
+      .map((foodTypeEntry) => ({
+        foodType: foodTypeEntry.foodType || "",
+        chefItem: [...(foodTypeEntry.chefItem || [])].sort(),
+        chefCuisines: [...(foodTypeEntry.chefCuisines || [])].sort(),
+      }))
+      .sort((a, b) => a.foodType.localeCompare(b.foodType)),
+  });
 
   useEffect(() => {
     const loadOnboardingOptions = async () => {
@@ -452,12 +504,38 @@ export default function Onboarding() {
       }
     };
 
+    const loadSavedPreScreening = async () => {
+      if (!chefUUID) return;
+
+      try {
+        const response = await chefServicesClient.get(`/chefOnboardingDetails/${chefUUID}`);
+        const nextPreScreening = normalizePreScreeningResponse(response);
+        setSavedPreScreening(nextPreScreening);
+        setS1((prev) => ({ ...prev, ...nextPreScreening }));
+      } catch (error) {
+        console.error("[Onboarding] failed to load saved pre-screening", error);
+      }
+    };
+
     loadOnboardingOptions();
-  }, []);
+    loadSavedPreScreening();
+  }, [chefUUID, normalizePreScreeningResponse]);
 
   if (submitted || chef?.onboardingSubmitted) {
     return <VerificationBoard chefUUID={chefUUID} />;
   }
+
+  const hasSavedPreScreening = !!savedPreScreening && (
+    savedPreScreening.city ||
+    savedPreScreening.area ||
+    savedPreScreening.priorExperience ||
+    savedPreScreening.hasFSSAI ||
+    (savedPreScreening.foodTypes || []).length > 0
+  );
+
+  const isStepZeroUnchanged = hasSavedPreScreening && JSON.stringify(buildComparableStepOne(s1)) === JSON.stringify(buildComparableStepOne(savedPreScreening));
+  const stepZeroButtonLabel = hasSavedPreScreening ? "Update & Continue" : "Save & Continue";
+  const isStepZeroDisabled = step === 0 && hasSavedPreScreening && isStepZeroUnchanged;
 
   const steps = [
     { label: "Pre-Screening", icon: ClipboardList },
@@ -536,13 +614,18 @@ export default function Onboarding() {
           </motion.div>
         </AnimatePresence>
 
-        <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100">
+        <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100 gap-4">
           <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500">
             <ChevronLeft className="h-4 w-4" /> Back
           </Button>
           {step < 3 ? (
-            <Button data-testid="onboarding-next" onClick={next} className="bg-[#1D4ED8] hover:bg-[#1E40AF]">
-              Save & Continue <ChevronRight className="h-4 w-4" />
+            <Button
+              data-testid="onboarding-next"
+              onClick={next}
+              disabled={isStepZeroDisabled}
+              className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
+            >
+              {step === 0 ? stepZeroButtonLabel : "Save & Continue"} <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
             <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting} className="bg-[#15803D] hover:bg-[#166534]">
