@@ -605,7 +605,26 @@ export default function Onboarding() {
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
-      await apiClient.post("/onboarding/personal", { chefUUID, ...s2 });
+      await chefServicesClient.post("/chefPersonalDetails", {
+        chefUUID,
+        firstName: s2.firstName,
+        lastName: s2.lastName,
+        phoneNumber: s2.phoneNumber,
+        emailAddress: s2.email,
+        gender: s2.gender,
+        maritalStatus: s2.maritalStatus,
+        isFamilyUnit: s2.isFamilyUnit,
+        aadhaarNumber: s2.aadhaarNumber,
+        profileImage: null,
+        kitchenDetails: [{
+          kitchenName: s2.kitchenAddress.kitchenName,
+          kitchenAddressLine1: s2.kitchenAddress.addressLine1,
+          kitchenAddressLine2: s2.kitchenAddress.addressLine2,
+          kitchenState: s2.kitchenAddress.state,
+          kitchenCity: s2.kitchenAddress.city,
+          kitchenPincode: s2.kitchenAddress.pincode,
+        }],
+      });
     }
     if (step === 2) {
       if (!s3.fssaiLicenseNumber) return toast.error("Enter FSSAI license number");
