@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
-  Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned,
+  Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned, Lock,
   ClipboardList, User, FileCheck2, Loader2, ChevronDown,
 } from "lucide-react";
 import apiClient, { chefServicesClient } from "@/lib/api";
@@ -449,6 +449,7 @@ function VerificationBoard({ chefUUID }) {
 // ---------------- Main ----------------
 export default function Onboarding() {
   const { chef, chefUUID } = useAuth();
+  const isUnderReview = String(chef?.verificationStatus || "").toUpperCase() === "UNDER_REVIEW";
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(chef?.onboardingSubmitted || false);
@@ -822,7 +823,16 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="relative max-w-3xl mx-auto">
+      {isUnderReview && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/75 backdrop-blur-[2px]">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-8 py-6 text-center shadow-soft">
+            <Lock className="h-8 w-8 text-slate-500" />
+            <p className="font-semibold text-slate-700">Profile Locked for Review ⏳</p>
+            <p className="text-sm text-slate-500">Your verification is in progress. All input fields and document updates are temporarily disabled.</p>
+          </div>
+        </div>
+      )}
       <h1 className="font-display font-extrabold text-2xl text-slate-900">Chef Onboarding</h1>
       <p className="text-slate-500 mb-6">Complete all 4 steps to get verified and go live.</p>
 
