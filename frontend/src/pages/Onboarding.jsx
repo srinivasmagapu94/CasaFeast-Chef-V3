@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -453,6 +454,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(chef?.onboardingSubmitted || false);
+  const [fssaiWarningOpen, setFssaiWarningOpen] = useState(false);
   const [availableFoodTypes, setAvailableFoodTypes] = useState([]);
   const [availableItemTypes, setAvailableItemTypes] = useState([]);
   const [availableCuisines, setAvailableCuisines] = useState([]);
@@ -759,6 +761,10 @@ export default function Onboarding() {
 
       await chefServicesClient.post("/chefPreScreening", payload);
       setSavedPreScreening(s1);
+      if (!s1.hasFSSAI) {
+        setFssaiWarningOpen(true);
+        return;
+      }
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
@@ -799,7 +805,13 @@ export default function Onboarding() {
     toast.success("Progress saved");
   };
 
-  const goToNextStep = () => setStep(step + 1);
+  const goToNextStep = () => {
+    if (step === 0 && !s1.hasFSSAI) {
+      setFssaiWarningOpen(true);
+      return;
+    }
+    setStep(step + 1);
+  };
 
   const submit = async () => {
     if (!s4.accountHolderName || !s4.accountNumber || !s4.ifscCode) return toast.error("Fill bank details");
@@ -887,6 +899,20 @@ export default function Onboarding() {
           )}
         </div>
       </div>
+
+      <Dialog open={fssaiWarningOpen} onOpenChange={setFssaiWarningOpen}>
+        <DialogContent className="sm:max-w-md shadow-2xl" data-testid="fssai-warning-dialog">
+          <DialogHeader>
+            <DialogTitle>FSSAI Certificate Required</DialogTitle>
+            <DialogDescription>
+              You must have an FSSAI Certificate to continue to the next onboarding step. You can close this dialog and update your Pre-Screening details.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setFssaiWarningOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
