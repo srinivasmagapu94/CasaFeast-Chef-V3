@@ -759,47 +759,62 @@ export default function Onboarding() {
         })),
       };
 
-      await chefServicesClient.post("/chefPreScreening", payload);
-      setSavedPreScreening(s1);
-      if (!s1.hasFSSAI) {
-        setFssaiWarningOpen(true);
-        return;
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefPreScreening", payload);
+        setSavedPreScreening(s1);
+        if (!s1.hasFSSAI) {
+          setFssaiWarningOpen(true);
+          return;
+        }
+      } finally {
+        setSubmitting(false);
       }
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
-      await chefServicesClient.post("/chefPersonalDetails", {
-        chefUUID,
-        firstName: s2.firstName,
-        lastName: s2.lastName,
-        phoneNumber: s2.phoneNumber,
-        emailAddress: s2.email,
-        gender: s2.gender,
-        maritalStatus: s2.maritalStatus,
-        isFamilyUnit: s2.isFamilyUnit,
-        aadhaarNumber: s2.aadhaarNumber,
-        profileImage: null,
-        kitchenDetails: [{
-          kitchenName: s2.kitchenAddress.kitchenName,
-          kitchenAddressLine1: s2.kitchenAddress.addressLine1,
-          kitchenAddressLine2: s2.kitchenAddress.addressLine2,
-          kitchenState: s2.kitchenAddress.state,
-          kitchenCity: s2.kitchenAddress.city,
-          kitchenPincode: s2.kitchenAddress.pincode,
-        }],
-      });
-      setSavedSteps((previous) => ({ ...previous, stepTwo: s2 }));
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefPersonalDetails", {
+          chefUUID,
+          firstName: s2.firstName,
+          lastName: s2.lastName,
+          phoneNumber: s2.phoneNumber,
+          emailAddress: s2.email,
+          gender: s2.gender,
+          maritalStatus: s2.maritalStatus,
+          isFamilyUnit: s2.isFamilyUnit,
+          aadhaarNumber: s2.aadhaarNumber,
+          profileImage: null,
+          kitchenDetails: [{
+            kitchenName: s2.kitchenAddress.kitchenName,
+            kitchenAddressLine1: s2.kitchenAddress.addressLine1,
+            kitchenAddressLine2: s2.kitchenAddress.addressLine2,
+            kitchenState: s2.kitchenAddress.state,
+            kitchenCity: s2.kitchenAddress.city,
+            kitchenPincode: s2.kitchenAddress.pincode,
+          }],
+        });
+        setSavedSteps((previous) => ({ ...previous, stepTwo: s2 }));
+      } finally {
+        setSubmitting(false);
+      }
     }
     if (step === 2) {
       if (!s3.fssaiLicenseNumber) return toast.error("Enter FSSAI license number");
-      await chefServicesClient.post("/chefFSSAIDetails", {
-        fssaiNumber: s3.fssaiLicenseNumber,
-        licenseStatus: s3.licenseStatus,
-        expiryDate: s3.expiryDate,
-        chefApprovedFSSAIProductCategories: [...s3.approvedCategories],
-        chefUUID,
-      });
-      setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefFSSAIDetails", {
+          fssaiNumber: s3.fssaiLicenseNumber,
+          licenseStatus: s3.licenseStatus,
+          expiryDate: s3.expiryDate,
+          chefApprovedFSSAIProductCategories: [...s3.approvedCategories],
+          chefUUID,
+        });
+        setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
+      } finally {
+        setSubmitting(false);
+      }
     }
     setStep(step + 1);
     toast.success("Progress saved");
@@ -836,6 +851,13 @@ export default function Onboarding() {
 
   return (
     <div className="relative max-w-3xl mx-auto">
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/10 backdrop-blur-[2px]" role="status" aria-live="polite" aria-label="Saving onboarding details">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <Loader2 className="h-8 w-8 animate-spin text-[#1D4ED8]" />
+          </div>
+        </div>
+      )}
       {isUnderReview && (
         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/75 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-8 py-6 text-center shadow-soft">
@@ -887,14 +909,14 @@ export default function Onboarding() {
             <Button
               data-testid="onboarding-continue"
               onClick={next}
-              disabled={isCurrentStepDisabled}
+              disabled={submitting || isCurrentStepDisabled}
               className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
             >
               {stepButtonLabel} <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepDisabled} className="bg-[#15803D] hover:bg-[#166534]">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Submit for Verification <Check className="h-4 w-4" /></>)}
+            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepDisabled} className="bg-[#15803D] hover:bg-[#166534] shadow-lg shadow-slate-900/20">
+              Submit for Verification <Check className="h-4 w-4" />
             </Button>
           )}
         </div>
