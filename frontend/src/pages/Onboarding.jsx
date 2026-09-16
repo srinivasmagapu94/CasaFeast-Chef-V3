@@ -409,6 +409,7 @@ function VerificationBoard({ chefUUID }) {
 
   const tracks = [
     { key: "kyc", label: "KYC Verification", desc: "Identity & address documents", icon: User },
+    { key: "fssai", label: "FSSAI Certificate Verification", desc: "Food safety & compliance review", icon: ShieldCheck },
     { key: "bank", label: "Bank Verification", desc: "Penny-drop account check", icon: Landmark },
     { key: "field", label: "Field Verification", desc: "Kitchen hygiene inspection", icon: MapPinned },
   ];
