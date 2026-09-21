@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
-  Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned,
-  ClipboardList, User, FileCheck2, Loader2,
+  Check, ChevronRight, ChevronLeft, Plus, X, ShieldCheck, Landmark, MapPinned, Lock,
+  ClipboardList, User, FileCheck2, Loader2, ChevronDown,
 } from "lucide-react";
-import apiClient from "@/lib/api";
+import apiClient, { chefServicesClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { FileUpload } from "@/components/FileUpload";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CITIES = ["Visakhapatnam", "Bangalore"];
@@ -21,8 +23,6 @@ const AREAS = {
   Visakhapatnam: ["MVP Colony", "Gajuwaka", "Madhurawada", "Dwaraka Nagar"],
   Bangalore: ["Koramangala", "Indiranagar", "Whitefield", "HSR Layout"],
 };
-const FOOD_TYPES = ["Homemade Food", "Bakery", "Snacks", "Sweets", "Tiffins"];
-const CATEGORIES = ["Cooked Meals", "Bakery", "Beverages", "Snacks", "Dairy"];
 
 function StepBadge({ active, done, index, label, icon: Icon }) {
   return (
@@ -40,15 +40,89 @@ function StepBadge({ active, done, index, label, icon: Icon }) {
   );
 }
 
+function MultiSelectField({ label, placeholder, options, value, onChange, testid }) {
+  const selectedValues = (value || []).filter((item) => item && item.trim().length > 0);
+
+  return (
+    <div>
+      <Label className="text-[11px] text-slate-500">{label}</Label>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            data-testid={testid}
+            variant="outline"
+            className="mt-1 w-full justify-between gap-2 rounded-lg border-slate-200 bg-white px-3 py-2 h-auto text-left font-normal hover:bg-slate-50"
+          >
+            <span className={`min-w-0 flex-1 whitespace-normal break-words ${selectedValues.length ? "text-slate-700" : "text-slate-400"}`}>
+              {selectedValues.length ? selectedValues.join(", ") : placeholder}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50 shrink-0 mt-0.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto">
+          {options.map((option) => (
+            <DropdownMenuCheckboxItem
+              key={option}
+              checked={selectedValues.includes(option)}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  onChange([...selectedValues, option]);
+                } else {
+                  onChange(selectedValues.filter((item) => item !== option));
+                }
+              }}
+            >
+              {option}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 // ---------------- Step 1 ----------------
-function Step1({ data, setData }) {
-  const addFoodType = (ft) => {
-    if (data.foodTypes.find((f) => f.foodType === ft)) {
-      setData({ ...data, foodTypes: data.foodTypes.filter((f) => f.foodType !== ft) });
-    } else {
-      setData({ ...data, foodTypes: [...data.foodTypes, { foodType: ft, chefItem: [""], chefCuisines: [""] }] });
+function Step1({ data, setData, availableFoodTypes, availableItemTypes, availableCuisines }) {
+  const dishOptions = (availableItemTypes || [])
+    .map((item) => typeof item === "string" ? item : (item.itemType || item.itemTypeName || item.name || item.label))
+    .filter(Boolean);
+
+  const cuisineOptions = (availableCuisines || [])
+    .map((item) => typeof item === "string" ? item : (item.cuisine || item.cuisineName || item.name || item.label))
+    .filter(Boolean);
+
+  const addFoodType = (foodTypeItem) => {
+    const foodTypeName = typeof foodTypeItem === "string" ? foodTypeItem : foodTypeItem.foodType;
+    const existing = data.foodTypes.find((f) => f.foodType === foodTypeName);
+
+    if (existing) {
+      setData({
+        ...data,
+        foodTypes: data.foodTypes.filter((f) => f.foodType !== foodTypeName),
+      });
+      return;
     }
+
+    const nextFoodType = typeof foodTypeItem === "string"
+      ? {
+          foodType: foodTypeName,
+          foodTypeDescription: "",
+          foodTypeUUID: null,
+          chefItem: [],
+          chefCuisines: [],
+        }
+      : {
+          ...foodTypeItem,
+          chefItem: [],
+          chefCuisines: [],
+        };
+
+    setData({
+      ...data,
+      foodTypes: [...data.foodTypes, nextFoodType],
+    });
   };
+
   const updateFT = (i, key, arr) => {
     const copy = [...data.foodTypes];
     copy[i] = { ...copy[i], [key]: arr };
@@ -89,12 +163,12 @@ function Step1({ data, setData }) {
         <Label className="text-sm font-semibold text-slate-700">Inventory Mapping — Food Types</Label>
         <p className="text-xs text-slate-400 mb-2">Select one or more food tiers you'll offer.</p>
         <div className="flex flex-wrap gap-2">
-          {FOOD_TYPES.map((ft) => {
-            const on = data.foodTypes.find((f) => f.foodType === ft);
+          {availableFoodTypes.map((ft) => {
+            const on = data.foodTypes.find((f) => f.foodType === ft.foodType);
             return (
-              <button key={ft} data-testid={`foodtype-${ft.replace(/\s/g, "-").toLowerCase()}`} onClick={() => addFoodType(ft)}
+              <button key={ft.foodTypeUUID || ft.foodType} data-testid={`foodtype-${ft.foodType.replace(/\s/g, "-").toLowerCase()}`} onClick={() => addFoodType(ft)}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all ${on ? "bg-[#15803D] text-white border-[#15803D]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>
-                {ft}
+                {ft.foodType}
               </button>
             );
           })}
@@ -104,16 +178,22 @@ function Step1({ data, setData }) {
             <div key={ft.foodType} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="font-semibold text-sm text-slate-700 mb-2">{ft.foodType}</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-[11px] text-slate-500">Dishes (comma separated)</Label>
-                  <Input data-testid={`fooditem-${i}`} className="mt-1 bg-white" placeholder="Idli, Dosa, Biryani"
-                    value={ft.chefItem.join(", ")} onChange={(e) => updateFT(i, "chefItem", e.target.value.split(",").map((s) => s.trim()))} />
-                </div>
-                <div>
-                  <Label className="text-[11px] text-slate-500">Cuisines (comma separated)</Label>
-                  <Input data-testid={`foodcuisine-${i}`} className="mt-1 bg-white" placeholder="South Indian, Andhra"
-                    value={ft.chefCuisines.join(", ")} onChange={(e) => updateFT(i, "chefCuisines", e.target.value.split(",").map((s) => s.trim()))} />
-                </div>
+                <MultiSelectField
+                  label="Item Types"
+                  placeholder="Select dishes"
+                  options={dishOptions}
+                  value={ft.chefItem}
+                  onChange={(value) => updateFT(i, "chefItem", value)}
+                  testid={`fooditem-${i}`}
+                />
+                <MultiSelectField
+                  label="Cuisines"
+                  placeholder="Select cuisines"
+                  options={cuisineOptions}
+                  value={ft.chefCuisines}
+                  onChange={(value) => updateFT(i, "chefCuisines", value)}
+                  testid={`foodcuisine-${i}`}
+                />
               </div>
             </div>
           ))}
@@ -147,15 +227,15 @@ function Step1({ data, setData }) {
 }
 
 // ---------------- Step 2 ----------------
-function Step2({ data, setData }) {
+function Step2({ data, setData, chefUUID }) {
   const setAddr = (k, v) => setData({ ...data, kitchenAddress: { ...data.kitchenAddress, [k]: v } });
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="First Name" testid="p-firstname" value={data.firstName} onChange={(v) => setData({ ...data, firstName: v })} />
-        <Field label="Last Name" testid="p-lastname" value={data.lastName} onChange={(v) => setData({ ...data, lastName: v })} />
-        <Field label="Phone Number" testid="p-phone" value={data.phoneNumber} onChange={(v) => setData({ ...data, phoneNumber: v })} />
-        <Field label="Email Address" testid="p-email" value={data.email} onChange={(v) => setData({ ...data, email: v })} />
+        <Field label="First Name" testid="p-firstname" value={data.firstName} onChange={(v) => setData({ ...data, firstName: v })} disabled />
+        <Field label="Last Name" testid="p-lastname" value={data.lastName} onChange={(v) => setData({ ...data, lastName: v })} disabled />
+        <Field label="Phone Number" testid="p-phone" value={data.phoneNumber} onChange={(v) => setData({ ...data, phoneNumber: v })} disabled />
+        <Field label="Email Address" testid="p-email" value={data.email} onChange={(v) => setData({ ...data, email: v })} disabled />
         <div>
           <Label className="text-xs font-semibold text-slate-600">Gender</Label>
           <Select value={data.gender} onValueChange={(v) => setData({ ...data, gender: v })}>
@@ -185,23 +265,50 @@ function Step2({ data, setData }) {
           <Field label="Kitchen Name" testid="k-name" value={data.kitchenAddress.kitchenName} onChange={(v) => setAddr("kitchenName", v)} />
           <Field label="Address Line 1" testid="k-addr1" value={data.kitchenAddress.addressLine1} onChange={(v) => setAddr("addressLine1", v)} />
           <Field label="Address Line 2" testid="k-addr2" value={data.kitchenAddress.addressLine2} onChange={(v) => setAddr("addressLine2", v)} />
-          <Field label="State" testid="k-state" value={data.kitchenAddress.state} onChange={(v) => setAddr("state", v)} />
-          <Field label="City" testid="k-city" value={data.kitchenAddress.city} onChange={(v) => setAddr("city", v)} />
+          <div>
+            <Label className="text-xs font-semibold text-slate-600">State</Label>
+            <Select
+              value={data.kitchenAddress.state}
+              onValueChange={(state) => setData({
+                ...data,
+                kitchenAddress: {
+                  ...data.kitchenAddress,
+                  state,
+                  city: state === "Karnataka" ? "Bangalore" : "Visakhapatnam",
+                },
+              })}
+            >
+              <SelectTrigger data-testid="k-state" className="mt-1"><SelectValue placeholder="Select state" /></SelectTrigger>
+              <SelectContent>{["Andhra Pradesh", "Karnataka"].map((state) => <SelectItem key={state} value={state}>{state}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-slate-600">City</Label>
+            <Select value={data.kitchenAddress.city} onValueChange={(v) => setAddr("city", v)}>
+              <SelectTrigger data-testid="k-city" className="mt-1"><SelectValue placeholder="Select city" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={data.kitchenAddress.state === "Karnataka" ? "Bangalore" : "Visakhapatnam"}>
+                  {data.kitchenAddress.state === "Karnataka" ? "Bangalore" : "Visakhapatnam"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Field label="Pincode" testid="k-pincode" value={data.kitchenAddress.pincode} onChange={(v) => setAddr("pincode", v)} />
         </div>
       </div>
 
       <FileUpload label="KYC Documents (Aadhaar / PAN)" accept="PDF, JPG, PNG" testid="kyc-upload"
-        files={data.kycDocuments} onChange={(f) => setData({ ...data, kycDocuments: f })} />
+        files={data.kycDocuments} onChange={(f) => setData({ ...data, kycDocuments: f })}
+        externalUpload={{ fieldName: "kycDocument", path: `/${chefUUID}/uploadKYCDocument` }} />
     </div>
   );
 }
 
 // ---------------- Step 3 ----------------
-function Step3({ data, setData }) {
-  const toggleCat = (c) => {
-    const on = data.approvedCategories.includes(c);
-    setData({ ...data, approvedCategories: on ? data.approvedCategories.filter((x) => x !== c) : [...data.approvedCategories, c] });
+function Step3({ data, setData, chefUUID, fssaiProductCategories }) {
+  const toggleCat = (productName) => {
+    const on = data.approvedCategories.includes(productName);
+    setData({ ...data, approvedCategories: on ? data.approvedCategories.filter((x) => x !== productName) : [...data.approvedCategories, productName] });
   };
   return (
     <div className="space-y-5">
@@ -221,26 +328,42 @@ function Step3({ data, setData }) {
       </div>
       <div>
         <Label className="text-sm font-semibold text-slate-700">Approved Product Categories</Label>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {CATEGORIES.map((c) => {
-            const on = data.approvedCategories.includes(c);
-            return (
-              <button key={c} data-testid={`fssai-cat-${c.replace(/\s/g, "-").toLowerCase()}`} onClick={() => toggleCat(c)}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all ${on ? "bg-[#1D4ED8] text-white border-[#1D4ED8]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>
-                {c}
-              </button>
-            );
-          })}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" data-testid="fssai-categories" className="mt-2 h-auto w-full justify-between gap-2 py-2 font-normal hover:bg-emerald-100 hover:text-emerald-800">
+              <span className={`min-w-0 flex-1 whitespace-normal break-words text-left ${data.approvedCategories.length ? "text-slate-700" : "text-slate-400"}`}>
+                {data.approvedCategories.length ? data.approvedCategories.join(", ") : "Select product categories"}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+            {fssaiProductCategories.map((category) => (
+              <DropdownMenuCheckboxItem
+                key={category.productName}
+                data-testid={`fssai-cat-${category.productName.replace(/\s/g, "-").toLowerCase()}`}
+                checked={data.approvedCategories.includes(category.productName)}
+                onCheckedChange={() => toggleCat(category.productName)}
+                className="data-[highlighted]:bg-emerald-100 data-[highlighted]:text-emerald-800 data-[state=checked]:bg-emerald-100 data-[state=checked]:text-emerald-800"
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span>{category.productName}</span>
+                  <span className="text-xs text-slate-500">{category.productDescription}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <FileUpload label="FSSAI Certificate (PDF)" accept="PDF" testid="fssai-upload"
-        files={data.fssaiDocuments} onChange={(f) => setData({ ...data, fssaiDocuments: f })} />
+        files={data.fssaiDocuments} onChange={(f) => setData({ ...data, fssaiDocuments: f })}
+        externalUpload={{ fieldName: "fssaiDocument", path: `/${chefUUID}/fssaiDocument` }} />
     </div>
   );
 }
 
 // ---------------- Step 4 ----------------
-function Step4({ data, setData }) {
+function Step4({ data, setData, chefUUID }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -250,16 +373,17 @@ function Step4({ data, setData }) {
         <Field label="IFSC Code" testid="bank-ifsc" value={data.ifscCode} onChange={(v) => setData({ ...data, ifscCode: v })} />
       </div>
       <FileUpload label="Passbook / Cancelled Cheque Proof" accept="PDF, JPG, PNG" testid="bank-upload"
-        files={data.passbookDocuments} onChange={(f) => setData({ ...data, passbookDocuments: f })} />
+        files={data.passbookDocuments} onChange={(f) => setData({ ...data, passbookDocuments: f })}
+        externalUpload={{ fieldName: "bankDocument", path: `/${chefUUID}/uploadBankDocument` }} />
     </div>
   );
 }
 
-function Field({ label, testid, value, onChange }) {
+function Field({ label, testid, value, onChange, disabled = false }) {
   return (
     <div>
       <Label className="text-xs font-semibold text-slate-600">{label}</Label>
-      <Input data-testid={testid} className="mt-1" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input data-testid={testid} className="mt-1" value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
     </div>
   );
 }
@@ -285,6 +409,7 @@ function VerificationBoard({ chefUUID }) {
 
   const tracks = [
     { key: "kyc", label: "KYC Verification", desc: "Identity & address documents", icon: User },
+    { key: "fssai", label: "FSSAI Certificate Verification", desc: "Food safety & compliance review", icon: ShieldCheck },
     { key: "bank", label: "Bank Verification", desc: "Penny-drop account check", icon: Landmark },
     { key: "field", label: "Field Verification", desc: "Kitchen hygiene inspection", icon: MapPinned },
   ];
@@ -326,18 +451,289 @@ function VerificationBoard({ chefUUID }) {
 // ---------------- Main ----------------
 export default function Onboarding() {
   const { chef, chefUUID } = useAuth();
+  const isUnderReview = String(chef?.verificationStatus || "").toUpperCase() === "UNDER_REVIEW";
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(chef?.onboardingSubmitted || false);
+  const [fssaiWarningOpen, setFssaiWarningOpen] = useState(false);
+  const [availableFoodTypes, setAvailableFoodTypes] = useState([]);
+  const [availableItemTypes, setAvailableItemTypes] = useState([]);
+  const [availableCuisines, setAvailableCuisines] = useState([]);
+  const [fssaiProductCategories, setFssaiProductCategories] = useState([]);
 
   const [s1, setS1] = useState({ city: "", area: "", priorExperience: false, hasFSSAI: false, foodTypes: [], acceptedTerms: false });
   const [s2, setS2] = useState({ firstName: chef?.firstName || "", lastName: chef?.lastName || "", phoneNumber: chef?.mobileNumber || "", email: chef?.email || "", gender: "", maritalStatus: "", isFamilyUnit: false, aadhaarNumber: "", kitchenAddress: { kitchenName: "", addressLine1: "", addressLine2: "", state: "", city: "", pincode: "" }, kycDocuments: [] });
   const [s3, setS3] = useState({ fssaiLicenseNumber: "", licenseStatus: "", expiryDate: "", approvedCategories: [], fssaiDocuments: [] });
   const [s4, setS4] = useState({ accountHolderName: "", bankName: "", accountNumber: "", ifscCode: "", passbookDocuments: [] });
+  const [savedPreScreening, setSavedPreScreening] = useState(null);
+  const [savedSteps, setSavedSteps] = useState({ stepTwo: null, stepThree: null, stepFour: null });
 
-  if (submitted || chef?.onboardingSubmitted) {
+  const normalizePreScreeningResponse = useCallback((response) => {
+    const normalizeFoodTypeEntry = (entry = {}) => {
+      const foodTypeName = entry.foodType || entry.foodTypeName || entry.name || "";
+      const chefItem = (entry.chefItem ?? entry.chefItems ?? entry.itemTypes ?? entry.items ?? [])
+        .map((item) => typeof item === "string" ? item : (item.item || item.itemType || item.itemTypeName || item.name || item.label || ""))
+        .filter(Boolean);
+      const chefCuisines = (entry.chefCuisines ?? entry.specialtyCuisines ?? entry.cuisines ?? [])
+        .map((item) => typeof item === "string" ? item : (item.cuisine || item.cuisineName || item.name || item.label || ""))
+        .filter(Boolean);
+
+      return {
+        ...entry,
+        foodType: foodTypeName,
+        foodTypeDescription: entry.foodTypeDescription || "",
+        foodTypeUUID: entry.foodTypeUUID || entry.foodTypeId || entry.id || null,
+        chefItem,
+        chefCuisines,
+      };
+    };
+
+    const preScreening = response?.data?.chefPreScreening || response?.data || response || {};
+    const selectedFoodTypes = Array.isArray(preScreening.foodTypes)
+      ? preScreening.foodTypes
+      : (Array.isArray(preScreening.chefFoodTypes)
+        ? preScreening.chefFoodTypes
+        : (Array.isArray(preScreening.foodType) ? preScreening.foodType : []));
+
+    return {
+      city: preScreening.city || "",
+      area: preScreening.area || "",
+      priorExperience: !!preScreening.priorExperience,
+      hasFSSAI: !!preScreening.hasFSSAI,
+      foodTypes: selectedFoodTypes.map(normalizeFoodTypeEntry),
+      acceptedTerms: true,
+    };
+  }, []);
+
+  const buildComparableStepOne = (value) => ({
+    city: value?.city || "",
+    area: value?.area || "",
+    priorExperience: !!value?.priorExperience,
+    hasFSSAI: !!value?.hasFSSAI,
+    foodTypes: (value?.foodTypes || [])
+      .map((foodTypeEntry) => ({
+        foodType: foodTypeEntry.foodType || "",
+        chefItem: [...(foodTypeEntry.chefItem || [])].sort(),
+        chefCuisines: [...(foodTypeEntry.chefCuisines || [])].sort(),
+      }))
+      .sort((a, b) => a.foodType.localeCompare(b.foodType)),
+  });
+
+  const normalizeDocuments = (documents) => (Array.isArray(documents) ? documents : documents ? [documents] : [])
+    .map((document) => {
+      if (typeof document === "string") return { fileId: document, fileName: document, size: 0 };
+      return {
+        fileId: document.fileId || document.id || document.fileUUID || document.uuid || document.url || document.fileName || document.name || "",
+        fileName: document.fileName || document.name || document.originalFilename || document.filename || "",
+        size: document.size || 0,
+      };
+    })
+    .filter((document) => document.fileId || document.fileName);
+
+  const normalizeOnboardingDetails = useCallback((response) => {
+    const body = response?.data?.data || response?.data || response || {};
+    const personal = body.chefPersonalDetails || body.personalDetails || body.chefPersonal || body;
+    const kitchenDetails = Array.isArray(personal.kitchenDetails) ? personal.kitchenDetails[0] : null;
+    const kitchen = kitchenDetails || personal.kitchenAddress || {};
+    const fssai = body.chefFSSAIDetails || body.fssaiDetails || body.fssai || body;
+    const bank = body.chefBankDetails || body.bankDetails || body.bank || body;
+
+    return {
+      stepTwo: {
+        firstName: personal.firstName || "",
+        lastName: personal.lastName || "",
+        phoneNumber: personal.phoneNumber || personal.mobileNumber || "",
+        email: personal.email || personal.emailAddress || "",
+        gender: personal.gender || "",
+        maritalStatus: personal.maritalStatus || "",
+        isFamilyUnit: !!personal.isFamilyUnit,
+        aadhaarNumber: personal.aadhaarNumber || "",
+        kitchenAddress: {
+          kitchenName: kitchen.kitchenName || "",
+          addressLine1: kitchen.kitchenAddressLine1 || kitchen.addressLine1 || "",
+          addressLine2: kitchen.kitchenAddressLine2 || kitchen.addressLine2 || "",
+          state: kitchen.kitchenState || kitchen.state || "",
+          city: kitchen.kitchenCity || kitchen.city || "",
+          pincode: kitchen.kitchenPincode || kitchen.pincode || "",
+        },
+        kycDocuments: normalizeDocuments(personal.kycDocuments || body.kycDocuments || body.kycDocument),
+      },
+      stepThree: {
+        fssaiLicenseNumber: fssai.fssaiNumber || fssai.fssaiLicenseNumber || "",
+        licenseStatus: fssai.licenseStatus || "",
+        expiryDate: fssai.expiryDate || "",
+        approvedCategories: fssai.approvedProductCategories || fssai.approvedCategories || [],
+        fssaiDocuments: normalizeDocuments(fssai.fssaiDocuments || body.fssaiDocuments || body.fssaiDocument),
+      },
+      stepFour: {
+        accountHolderName: bank.accountHolderName || "",
+        bankName: bank.bankName || "",
+        accountNumber: bank.accountNumber || "",
+        ifscCode: bank.ifscCode || "",
+        passbookDocuments: normalizeDocuments(bank.passbookDocuments || body.passbookDocuments || body.passbookDocument),
+      },
+    };
+  }, []);
+
+  const buildComparableDocuments = (documents) => normalizeDocuments(documents)
+    .map((document) => ({ fileId: document.fileId, fileName: document.fileName, size: document.size }))
+    .sort((a, b) => `${a.fileId}${a.fileName}`.localeCompare(`${b.fileId}${b.fileName}`));
+
+  const buildComparableStepTwo = (value) => ({
+    firstName: value?.firstName || "",
+    lastName: value?.lastName || "",
+    phoneNumber: value?.phoneNumber || "",
+    email: value?.email || "",
+    gender: value?.gender || "",
+    maritalStatus: value?.maritalStatus || "",
+    isFamilyUnit: !!value?.isFamilyUnit,
+    aadhaarNumber: value?.aadhaarNumber || "",
+    kitchenAddress: value?.kitchenAddress || {},
+    kycDocuments: buildComparableDocuments(value?.kycDocuments),
+  });
+
+  const buildComparableStepThree = (value) => ({
+    fssaiLicenseNumber: value?.fssaiLicenseNumber || "",
+    licenseStatus: value?.licenseStatus || "",
+    expiryDate: value?.expiryDate || "",
+    approvedCategories: [...(value?.approvedCategories || [])].sort(),
+    fssaiDocuments: buildComparableDocuments(value?.fssaiDocuments),
+  });
+
+  const buildComparableStepFour = (value) => ({
+    accountHolderName: value?.accountHolderName || "",
+    bankName: value?.bankName || "",
+    accountNumber: value?.accountNumber || "",
+    ifscCode: value?.ifscCode || "",
+    passbookDocuments: buildComparableDocuments(value?.passbookDocuments),
+  });
+
+  useEffect(() => {
+    const loadOnboardingOptions = async () => {
+      const extractList = (res, field) => {
+        const data = res?.data;
+        if (Array.isArray(data?.[field])) return data[field];
+        if (Array.isArray(data)) return data;
+        return [];
+      };
+
+      const [foodTypesRes, itemTypesRes, cuisinesRes, fssaiCategoriesRes] = await Promise.allSettled([
+        chefServicesClient.get("/fetchFoodTypes"),
+        chefServicesClient.get("/fetchItemTypes"),
+        chefServicesClient.get("/fetchCuisines"),
+        chefServicesClient.get("/fetchFSSAIProductCategories"),
+      ]);
+
+      if (foodTypesRes.status === "fulfilled") {
+        setAvailableFoodTypes(extractList(foodTypesRes.value, "foodTypes"));
+      } else {
+        console.error("[Onboarding] failed to load food types", foodTypesRes.reason);
+      }
+
+      if (itemTypesRes.status === "fulfilled") {
+        setAvailableItemTypes(extractList(itemTypesRes.value, "itemTypes"));
+      } else {
+        console.error("[Onboarding] failed to load item types", itemTypesRes.reason);
+      }
+
+      if (cuisinesRes.status === "fulfilled") {
+        setAvailableCuisines(extractList(cuisinesRes.value, "cuisines"));
+      } else {
+        console.error("[Onboarding] failed to load cuisines", cuisinesRes.reason);
+      }
+
+      if (fssaiCategoriesRes.status === "fulfilled") {
+        setFssaiProductCategories(extractList(fssaiCategoriesRes.value, "fssaiProductCategories"));
+      } else {
+        console.error("[Onboarding] failed to load FSSAI product categories", fssaiCategoriesRes.reason);
+      }
+    };
+
+    const loadSavedPreScreening = async () => {
+      if (!chefUUID) return;
+
+      try {
+        const response = await chefServicesClient.get(`/chefOnboardingDetails/${chefUUID}`);
+        const nextPreScreening = normalizePreScreeningResponse(response);
+        const savedDetails = normalizeOnboardingDetails(response);
+        const hasStepTwoDetails = savedDetails.stepTwo.firstName || savedDetails.stepTwo.lastName || savedDetails.stepTwo.phoneNumber
+          || savedDetails.stepTwo.email || savedDetails.stepTwo.gender || savedDetails.stepTwo.aadhaarNumber
+          || savedDetails.stepTwo.kitchenAddress.kitchenName || savedDetails.stepTwo.kycDocuments.length > 0;
+        const hasStepThreeDetails = savedDetails.stepThree.fssaiLicenseNumber || savedDetails.stepThree.licenseStatus
+          || savedDetails.stepThree.expiryDate || savedDetails.stepThree.approvedCategories.length > 0
+          || savedDetails.stepThree.fssaiDocuments.length > 0;
+        const hasStepFourDetails = savedDetails.stepFour.accountHolderName || savedDetails.stepFour.bankName
+          || savedDetails.stepFour.accountNumber || savedDetails.stepFour.ifscCode
+          || savedDetails.stepFour.passbookDocuments.length > 0;
+        setSavedPreScreening(nextPreScreening);
+        setSavedSteps({
+          stepTwo: hasStepTwoDetails ? savedDetails.stepTwo : null,
+          stepThree: hasStepThreeDetails ? savedDetails.stepThree : null,
+          stepFour: hasStepFourDetails ? savedDetails.stepFour : null,
+        });
+        setS1((prev) => ({ ...prev, ...nextPreScreening }));
+        if (hasStepTwoDetails) {
+          setS2((prev) => ({ ...prev, ...savedDetails.stepTwo, kitchenAddress: { ...prev.kitchenAddress, ...savedDetails.stepTwo.kitchenAddress } }));
+        }
+        if (hasStepThreeDetails) setS3((prev) => ({ ...prev, ...savedDetails.stepThree }));
+        if (hasStepFourDetails) setS4((prev) => ({ ...prev, ...savedDetails.stepFour }));
+      } catch (error) {
+        console.error("[Onboarding] failed to load saved pre-screening", error);
+      }
+    };
+
+    loadOnboardingOptions();
+    loadSavedPreScreening();
+  }, [chefUUID, normalizeOnboardingDetails, normalizePreScreeningResponse]);
+
+  if (submitted || chef?.onboardingSubmitted || isUnderReview) {
     return <VerificationBoard chefUUID={chefUUID} />;
   }
+
+  const hasSavedPreScreening = !!savedPreScreening && (
+    savedPreScreening.city ||
+    savedPreScreening.area ||
+    savedPreScreening.priorExperience ||
+    savedPreScreening.hasFSSAI ||
+    (savedPreScreening.foodTypes || []).length > 0
+  );
+
+  const isStepZeroUnchanged = hasSavedPreScreening && JSON.stringify(buildComparableStepOne(s1)) === JSON.stringify(buildComparableStepOne(savedPreScreening));
+  const hasSavedStepTwo = !!savedSteps.stepTwo && (
+    savedSteps.stepTwo.firstName || savedSteps.stepTwo.lastName || savedSteps.stepTwo.phoneNumber
+    || savedSteps.stepTwo.email || savedSteps.stepTwo.gender || savedSteps.stepTwo.aadhaarNumber
+    || savedSteps.stepTwo.kitchenAddress.kitchenName || savedSteps.stepTwo.kycDocuments.length > 0
+  );
+  const hasSavedStepThree = !!savedSteps.stepThree && (
+    savedSteps.stepThree.fssaiLicenseNumber || savedSteps.stepThree.licenseStatus
+    || savedSteps.stepThree.expiryDate || savedSteps.stepThree.approvedCategories.length > 0
+    || savedSteps.stepThree.fssaiDocuments.length > 0
+  );
+  const hasSavedStepFour = !!savedSteps.stepFour && (
+    savedSteps.stepFour.accountHolderName || savedSteps.stepFour.bankName || savedSteps.stepFour.accountNumber
+    || savedSteps.stepFour.ifscCode || savedSteps.stepFour.passbookDocuments.length > 0
+  );
+  const savedStepFlags = [hasSavedPreScreening, hasSavedStepTwo, hasSavedStepThree, hasSavedStepFour];
+  const currentStepUnchanged = [
+    isStepZeroUnchanged,
+    hasSavedStepTwo && JSON.stringify(buildComparableStepTwo(s2)) === JSON.stringify(buildComparableStepTwo(savedSteps.stepTwo)),
+    hasSavedStepThree && JSON.stringify(buildComparableStepThree(s3)) === JSON.stringify(buildComparableStepThree(savedSteps.stepThree)),
+    hasSavedStepFour && JSON.stringify(buildComparableStepFour(s4)) === JSON.stringify(buildComparableStepFour(savedSteps.stepFour)),
+  ][step];
+  const stepButtonLabel = savedStepFlags[step] ? "Update & Continue" : "Save & Continue";
+  const isStepOneComplete = !!s1.city && !!s1.area && !!s1.acceptedTerms && (s1.foodTypes || []).length > 0 && s1.foodTypes.every((foodType) => (
+    (foodType.chefItem || []).length > 0 && (foodType.chefCuisines || []).length > 0
+  ));
+  const isStepTwoComplete = !!s2.firstName && !!s2.lastName && !!s2.phoneNumber && !!s2.email && !!s2.gender && !!s2.maritalStatus
+    && !!s2.aadhaarNumber && !!s2.kitchenAddress.kitchenName && !!s2.kitchenAddress.addressLine1
+    && !!s2.kitchenAddress.addressLine2 && !!s2.kitchenAddress.state && !!s2.kitchenAddress.city
+    && !!s2.kitchenAddress.pincode && (s2.kycDocuments || []).length > 0;
+  const isStepThreeComplete = !!s3.fssaiLicenseNumber && !!s3.licenseStatus && !!s3.expiryDate
+    && (s3.approvedCategories || []).length > 0 && (s3.fssaiDocuments || []).length > 0;
+  const isStepFourComplete = !!s4.accountHolderName && !!s4.bankName && !!s4.accountNumber && !!s4.ifscCode
+    && (s4.passbookDocuments || []).length > 0;
+  const isCurrentStepIncomplete = [!isStepOneComplete, !isStepTwoComplete, !isStepThreeComplete, !isStepFourComplete][step];
+  const isCurrentStepDisabled = isCurrentStepIncomplete || (savedStepFlags[step] && currentStepUnchanged);
 
   const steps = [
     { label: "Pre-Screening", icon: ClipboardList },
@@ -350,25 +746,101 @@ export default function Onboarding() {
     if (step === 0) {
       if (!s1.city || !s1.area) return toast.error("Select city and area");
       if (!s1.acceptedTerms) return toast.error("Please accept the commission terms to continue");
-      await apiClient.post("/onboarding/prescreening", { chefUUID, ...s1 });
+
+      const payload = {
+        chefUUID,
+        city: s1.city,
+        area: s1.area,
+        priorExperience: s1.priorExperience,
+        hasFSSAI: s1.hasFSSAI,
+        foodType: (s1.foodTypes || []).map((foodTypeEntry) => ({
+          foodType: foodTypeEntry.foodType,
+          chefItem: (foodTypeEntry.chefItem || []).map((item) => ({ item })),
+          chefCuisines: (foodTypeEntry.chefCuisines || []).map((cuisine) => ({ cuisine })),
+        })),
+      };
+
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefPreScreening", payload);
+        setSavedPreScreening(s1);
+        if (!s1.hasFSSAI) {
+          setFssaiWarningOpen(true);
+          return;
+        }
+      } finally {
+        setSubmitting(false);
+      }
     }
     if (step === 1) {
       if (!s2.firstName || !s2.phoneNumber) return toast.error("Fill personal details");
-      await apiClient.post("/onboarding/personal", { chefUUID, ...s2 });
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefPersonalDetails", {
+          chefUUID,
+          firstName: s2.firstName,
+          lastName: s2.lastName,
+          phoneNumber: s2.phoneNumber,
+          emailAddress: s2.email,
+          gender: s2.gender,
+          maritalStatus: s2.maritalStatus,
+          isFamilyUnit: s2.isFamilyUnit,
+          aadhaarNumber: s2.aadhaarNumber,
+          profileImage: null,
+          kitchenDetails: [{
+            kitchenName: s2.kitchenAddress.kitchenName,
+            kitchenAddressLine1: s2.kitchenAddress.addressLine1,
+            kitchenAddressLine2: s2.kitchenAddress.addressLine2,
+            kitchenState: s2.kitchenAddress.state,
+            kitchenCity: s2.kitchenAddress.city,
+            kitchenPincode: s2.kitchenAddress.pincode,
+          }],
+        });
+        setSavedSteps((previous) => ({ ...previous, stepTwo: s2 }));
+      } finally {
+        setSubmitting(false);
+      }
     }
     if (step === 2) {
       if (!s3.fssaiLicenseNumber) return toast.error("Enter FSSAI license number");
-      await apiClient.post("/onboarding/fssai", { chefUUID, ...s3 });
+      setSubmitting(true);
+      try {
+        await chefServicesClient.post("/chefFSSAIDetails", {
+          fssaiNumber: s3.fssaiLicenseNumber,
+          licenseStatus: s3.licenseStatus,
+          expiryDate: s3.expiryDate,
+          chefApprovedFSSAIProductCategories: [...s3.approvedCategories],
+          chefUUID,
+        });
+        setSavedSteps((previous) => ({ ...previous, stepThree: s3 }));
+      } finally {
+        setSubmitting(false);
+      }
     }
     setStep(step + 1);
     toast.success("Progress saved");
+  };
+
+  const goToNextStep = () => {
+    if (step === 0 && !s1.hasFSSAI) {
+      setFssaiWarningOpen(true);
+      return;
+    }
+    setStep(step + 1);
   };
 
   const submit = async () => {
     if (!s4.accountHolderName || !s4.accountNumber || !s4.ifscCode) return toast.error("Fill bank details");
     setSubmitting(true);
     try {
-      await apiClient.post("/onboarding/bank", { chefUUID, ...s4 });
+      await chefServicesClient.post("/chefBankDetails", {
+        accountHolderName: s4.accountHolderName,
+        bankName: s4.bankName,
+        accountNumber: s4.accountNumber,
+        ifscCode: s4.ifscCode,
+        chefUUID,
+      });
+      setSavedSteps((previous) => ({ ...previous, stepFour: s4 }));
       setSubmitted(true);
       toast.success("Onboarding submitted for verification!");
     } catch {
@@ -379,7 +851,23 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="relative max-w-3xl mx-auto">
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/10 backdrop-blur-[2px]" role="status" aria-live="polite" aria-label="Saving onboarding details">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <Loader2 className="h-8 w-8 animate-spin text-[#1D4ED8]" />
+          </div>
+        </div>
+      )}
+      {isUnderReview && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/75 backdrop-blur-[2px]">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-8 py-6 text-center shadow-soft">
+            <Lock className="h-8 w-8 text-slate-500" />
+            <p className="font-semibold text-slate-700">Profile Locked for Review ⏳</p>
+            <p className="text-sm text-slate-500">Your verification is in progress. All input fields and document updates are temporarily disabled.</p>
+          </div>
+        </div>
+      )}
       <h1 className="font-display font-extrabold text-2xl text-slate-900">Chef Onboarding</h1>
       <p className="text-slate-500 mb-6">Complete all 4 steps to get verified and go live.</p>
 
@@ -395,28 +883,59 @@ export default function Onboarding() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-soft p-6 lg:p-8">
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
-            {step === 0 && <Step1 data={s1} setData={setS1} />}
-            {step === 1 && <Step2 data={s2} setData={setS2} />}
-            {step === 2 && <Step3 data={s3} setData={setS3} />}
-            {step === 3 && <Step4 data={s4} setData={setS4} />}
+            {step === 0 && <Step1 data={s1} setData={setS1} availableFoodTypes={availableFoodTypes} availableItemTypes={availableItemTypes} availableCuisines={availableCuisines} />}
+            {step === 1 && <Step2 data={s2} setData={setS2} chefUUID={chefUUID} />}
+            {step === 2 && <Step3 data={s3} setData={setS3} chefUUID={chefUUID} fssaiProductCategories={fssaiProductCategories} />}
+            {step === 3 && <Step4 data={s4} setData={setS4} chefUUID={chefUUID} />}
           </motion.div>
         </AnimatePresence>
 
-        <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100">
-          <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500">
-            <ChevronLeft className="h-4 w-4" /> Back
-          </Button>
+        <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-100 gap-4">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" data-testid="onboarding-back" disabled={step === 0} onClick={() => setStep(step - 1)} className="text-slate-500 focus:bg-transparent active:bg-emerald-100 active:text-emerald-800">
+              <ChevronLeft className="h-4 w-4" /> Back
+            </Button>
+            {step < 3 && (
+              <Button
+                variant="ghost"
+                data-testid="onboarding-next"
+                onClick={goToNextStep}
+                className="text-slate-500 focus:bg-transparent active:bg-emerald-100 active:text-emerald-800"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
           {step < 3 ? (
-            <Button data-testid="onboarding-next" onClick={next} className="bg-[#1D4ED8] hover:bg-[#1E40AF]">
-              Continue <ChevronRight className="h-4 w-4" />
+            <Button
+              data-testid="onboarding-continue"
+              onClick={next}
+              disabled={submitting || isCurrentStepDisabled}
+              className="bg-[#1D4ED8] hover:bg-[#1E40AF]"
+            >
+              {stepButtonLabel} <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting} className="bg-[#15803D] hover:bg-[#166534]">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Submit for Verification <Check className="h-4 w-4" /></>)}
+            <Button data-testid="onboarding-submit" onClick={submit} disabled={submitting || isCurrentStepDisabled} className="bg-[#15803D] hover:bg-[#166534] shadow-lg shadow-slate-900/20">
+              Submit for Verification <Check className="h-4 w-4" />
             </Button>
           )}
         </div>
       </div>
+
+      <Dialog open={fssaiWarningOpen} onOpenChange={setFssaiWarningOpen}>
+        <DialogContent className="sm:max-w-md shadow-2xl" data-testid="fssai-warning-dialog">
+          <DialogHeader>
+            <DialogTitle>FSSAI Certificate Required</DialogTitle>
+            <DialogDescription>
+              You must have an FSSAI Certificate to continue to the next onboarding step. You can close this dialog and update your Pre-Screening details.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setFssaiWarningOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

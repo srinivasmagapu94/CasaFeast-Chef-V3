@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck, TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
+  TrendingUp, Clock3, Loader2, ArrowRight, Phone, Mail, Sparkles,
 } from "lucide-react";
-import apiClient from "@/lib/api";
+import apiClient, { chefServicesClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { LegalFooter } from "@/components/LegalFooter";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { renderTurnstile, removeTurnstile } from "@/services/cloudflareTurnstile";
 
 const STORY = [
   { img: "/story/cook.jpeg", step: "01", tag: "COOK", title: "Cook what you love, from home", desc: "Prepare fresh homemade meals in your own kitchen — no restaurant, no overheads.", metric: ["Home kitchens", "100%"], color: "#15803D" },
@@ -21,6 +22,55 @@ const STORY = [
   { img: "/story/order.jpeg", step: "03", tag: "ORDERS", title: "Receive & ship daily orders", desc: "Accept subscription orders and hand off to a delivery partner in one tap.", metric: ["Avg. orders/day", "40+"], color: "#D97706" },
   { img: "/story/earn.jpeg", step: "04", tag: "EARN", title: "Grow real monthly income", desc: "Track earnings, payouts and subscriptions — turn your cooking into a thriving business.", metric: ["Avg. monthly", "₹1.2L+"], color: "#15803D" },
 ];
+
+const MOBILE_VALIDATION_TOAST_ID = "mobile-validation-error";
+const TURNSTILE_SITE_KEY = process.env.REACT_APP_CLOUDFLARE_TURNSTILE_SITE_KEY;
+
+function TurnstileWidget({ onToken, onError }) {
+  const containerRef = useRef(null);
+  const widgetPromiseRef = useRef(null);
+  const widgetIdRef = useRef(null);
+  const cleanupTimerRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(cleanupTimerRef.current);
+
+    if (widgetPromiseRef.current) return undefined;
+
+    widgetPromiseRef.current = renderTurnstile(containerRef.current, TURNSTILE_SITE_KEY, {
+      onToken: (token) => {
+        console.log("[Turnstile] token received", { hasToken: Boolean(token), length: token?.length || 0 });
+        onToken(token);
+      },
+      onExpired: () => {
+        console.warn("[Turnstile] token expired");
+        onToken("");
+      },
+      onError: () => {
+        console.error("[Turnstile] token generation failed");
+        onError("");
+      },
+    })
+      .then((id) => {
+        widgetIdRef.current = id;
+        return id;
+      })
+      .catch(() => {
+        onError("");
+        widgetPromiseRef.current = null;
+      });
+
+    return () => {
+      cleanupTimerRef.current = setTimeout(() => {
+        removeTurnstile(widgetIdRef.current);
+        widgetIdRef.current = null;
+        widgetPromiseRef.current = null;
+      }, 0);
+    };
+  }, [onToken, onError]);
+
+  return <div ref={containerRef} data-testid="turnstile-widget" />;
+}
 
 function VideoShowcase() {
   const [idx, setIdx] = useState(0);
@@ -112,11 +162,6 @@ function OTPDialog({ open, onClose, onVerify, demoOtp, verifying }) {
             Enter the 6-digit code we sent via SMS.
           </DialogDescription>
         </DialogHeader>
-        {demoOtp && (
-          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700" data-testid="demo-otp-hint">
-            Demo mode: use code <span className="font-mono font-bold">{demoOtp}</span> (any 6 digits work)
-          </div>
-        )}
         <div className="flex justify-center py-3">
           <InputOTP maxLength={6} value={otp} onChange={setOtp} data-testid="otp-input">
             <InputOTPGroup>
@@ -154,7 +199,7 @@ function OTPDialog({ open, onClose, onVerify, demoOtp, verifying }) {
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { login, chefUUID } = useAuth();
+  const { login, chefUUID, setChefUUID } = useAuth();
   const [mode, setMode] = useState("signup"); // signup | login
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", mobileNumber: "" });
   const [loginId, setLoginId] = useState("");
@@ -165,49 +210,70 @@ export default function AuthPage() {
   const [flow, setFlow] = useState(null); // 'signup' | 'login'
   const [submitting, setSubmitting] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const mobileValidationId = useRef(0);
 
   useEffect(() => {
     if (chefUUID) navigate("/app");
   }, [chefUUID, navigate]);
 
   const validateMobile = async () => {
+    const validationId = ++mobileValidationId.current;
     const digits = form.mobileNumber.replace(/\D/g, "");
     if (digits.length !== 10) {
       setMobileValid(false);
       return;
     }
     try {
-      const res = await apiClient.get(`/validateMobileNumber/${digits}`);
-      setMobileValid(res.data.isMobileNumberValid);
-      if (!res.data.isMobileNumberValid) toast.error("Enter a valid 10-digit mobile number");
+      const res = await chefServicesClient.post(`/validateMobileNumber/${encodeURIComponent(digits)}`);
+      if (validationId !== mobileValidationId.current) return;
+      const isMobileNumberValid = res.data.mobileNumberValid === true;
+      setMobileValid(isMobileNumberValid);
+      if (isMobileNumberValid) {
+        toast.dismiss(MOBILE_VALIDATION_TOAST_ID);
+      } else {
+        toast.error("Account on this number already created, please login.", { id: MOBILE_VALIDATION_TOAST_ID });
+      }
     } catch {
+      if (validationId !== mobileValidationId.current) return;
       setMobileValid(false);
+      toast.error("Unable to validate this mobile number");
     }
   };
 
   const validateEmail = async () => {
     if (!form.email) return;
     try {
-      const res = await apiClient.get(`/validateEmail/${encodeURIComponent(form.email)}`);
-      setEmailValid(res.data.isEmailValid && res.data.accountStatus === "active");
-      if (!res.data.isEmailValid) toast.error("Enter a valid email address");
+      const res = await chefServicesClient.post(`/validateEmail/${encodeURIComponent(form.email)}`);
+      const isEmailValid = res.data.emailValid === true;
+      setEmailValid(isEmailValid);
+      if (!isEmailValid) {
+        toast.error("Account with this email already created, please login.");
+      }
     } catch {
       setEmailValid(false);
+      toast.error("Unable to validate this email address");
     }
   };
 
   const startSignup = async () => {
-    if (!form.firstName || !form.lastName || !form.email || !mobileValid) {
-      toast.error("Please complete all fields with a valid mobile number");
+    console.log("[Signup] captcha token state", { hasToken: Boolean(captchaToken), length: captchaToken.length });
+    if (!form.firstName || !form.lastName || !form.email || !mobileValid || !captchaToken) {
+      toast.error("Please complete all fields and verify the captcha");
       return;
     }
     setSubmitting(true);
     try {
-      await apiClient.post("/signup", { ...form, captchaToken: "stub-captcha-token" });
-      const otpRes = await apiClient.post("/sendOTP", { mobileNumber: form.mobileNumber });
-      setDemoOtp(otpRes.data.demoOtp);
+      const chefRes = await chefServicesClient.post("/saveChef", {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phoneNumber: form.mobileNumber,
+        captchaToken,
+      });
       setFlow("signup");
       setOtpOpen(true);
+      return chefRes.data.chefUUID;
     } catch (e) {
       toast.error(e.response?.data?.detail || "Signup failed");
     } finally {
@@ -222,7 +288,7 @@ export default function AuthPage() {
     }
     setSubmitting(true);
     try {
-      const res = await apiClient.post("/login", { identifier: loginId });
+      const res = await chefServicesClient.post("/chefLogin", { phoneNumber: loginId });
       setDemoOtp(res.data.demoOtp);
       setFlow("login");
       setOtpOpen(true);
@@ -237,12 +303,27 @@ export default function AuthPage() {
     setVerifying(true);
     try {
       if (flow === "signup") {
-        await apiClient.post("/verifyOTP", { mobileNumber: form.mobileNumber, otp });
-        const lres = await apiClient.post("/loginVerify", { identifier: form.mobileNumber, otp });
-        login(lres.data.token, lres.data.chefUUID);
+        const otpRes = await chefServicesClient.post("/verifyOTP", {
+          phoneNumber: form.mobileNumber,
+          otp,
+        });
+        if (!otpRes.data.otpValid) {
+          toast.error(otpRes.data.errorMessage || "OTP verification failed");
+          return;
+        }
+        localStorage.setItem("cf_uuid", otpRes.data.chefUUID);
+        setChefUUID(otpRes.data.chefUUID);
       } else {
-        const lres = await apiClient.post("/loginVerify", { identifier: loginId, otp });
-        login(lres.data.token, lres.data.chefUUID);
+        const otpRes = await chefServicesClient.post("/verifyOTP", {
+          phoneNumber: loginId,
+          otp,
+        });
+        if (!otpRes.data.otpValid) {
+          toast.error(otpRes.data.errorMessage || "OTP verification failed");
+          return;
+        }
+        localStorage.setItem("cf_uuid", otpRes.data.chefUUID);
+        setChefUUID(otpRes.data.chefUUID);
       }
       setOtpOpen(false);
       toast.success("Verified! Checking your location…");
@@ -342,7 +423,7 @@ export default function AuthPage() {
                       <Input
                         data-testid="signup-mobile"
                         value={form.mobileNumber}
-                        onChange={(e) => { setForm({ ...form, mobileNumber: e.target.value }); setMobileValid(null); }}
+                        onChange={(e) => { mobileValidationId.current += 1; setForm({ ...form, mobileNumber: e.target.value }); setMobileValid(null); }}
                         onBlur={validateMobile}
                         maxLength={10}
                         placeholder="9876543210"
@@ -351,10 +432,7 @@ export default function AuthPage() {
                     </div>
                     {mobileValid === true && <p className="text-[11px] text-emerald-600 mt-1">✓ Valid number — OTP ready</p>}
                   </div>
-                  <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span className="text-[11px] text-slate-500">Protected by Google Invisible Captcha (auto-verified)</span>
-                  </div>
+                  <TurnstileWidget onToken={setCaptchaToken} onError={setCaptchaToken} />
                   <Button
                     data-testid="signup-submit-button"
                     onClick={startSignup}
